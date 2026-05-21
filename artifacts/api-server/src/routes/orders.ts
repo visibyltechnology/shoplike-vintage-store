@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, and, sql } from "drizzle-orm";
-import { db, ordersTable } from "@workspace/db";
+import { eq, desc, sql } from "drizzle-orm";
+import { db, ordersTable, settingsTable } from "@workspace/db";
 import {
   GetOrdersQueryParams,
   CreateOrderBody,
@@ -11,6 +11,30 @@ import {
 import { nanoid } from "../lib/nanoid.js";
 
 const router: IRouter = Router();
+
+async function sendBulkSMS(phone: string, message: string, apiKey: string): Promise<void> {
+  try {
+    const params = new URLSearchParams({
+      api_token: apiKey,
+      from: "ShoplikeVin",
+      to: phone.replace(/^0/, "234").replace(/^\+/, ""),
+      body: message,
+    });
+    await fetch(`https://www.bulksmsnigeria.com/api/v2/sms?${params.toString()}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    // SMS failure is non-fatal
+  }
+}
+
+const STATUS_MESSAGES: Record<string, string> = {
+  confirmed: "Your Shoplike Vintage order has been confirmed! We're preparing it for dispatch.",
+  shipped: "Great news! Your Shoplike Vintage order is on the way. You'll receive it soon.",
+  delivered: "Your Shoplike Vintage order has been delivered. Thank you for shopping with us!",
+  cancelled: "Your Shoplike Vintage order has been cancelled. Contact us on WhatsApp: 09063172596 for help.",
+};
 
 router.get("/orders", async (req, res): Promise<void> => {
   const parsed = GetOrdersQueryParams.safeParse(req.query);
@@ -67,6 +91,16 @@ router.post("/orders", async (req, res): Promise<void> => {
     })
     .returning();
 
+  // Send confirmation SMS if enabled
+  const [settings] = await db.select().from(settingsTable);
+  if (settings?.smsEnabled && settings.smsApiKey) {
+    const phone = (shippingAddress as any)?.phone;
+    if (phone) {
+      const msg = `Hi ${(shippingAddress as any)?.fullName || "Customer"}, your Shoplike Vintage order ${orderRef} has been received! Total: NGN ${Number(total).toLocaleString()}. We'll update you on delivery.`;
+      await sendBulkSMS(phone, msg, settings.smsApiKey);
+    }
+  }
+
   res.status(201).json(normalizeOrder(order));
 });
 
@@ -112,6 +146,16 @@ router.patch("/orders/:id/status", async (req, res): Promise<void> => {
   if (!order) {
     res.status(404).json({ error: "Order not found" });
     return;
+  }
+
+  // Send SMS notification on status change
+  const [settings] = await db.select().from(settingsTable);
+  if (settings?.smsEnabled && settings.smsApiKey) {
+    const phone = (order.shippingAddress as any)?.phone;
+    const message = STATUS_MESSAGES[parsed.data.status];
+    if (phone && message) {
+      await sendBulkSMS(phone, message, settings.smsApiKey);
+    }
   }
 
   res.json(normalizeOrder(order));

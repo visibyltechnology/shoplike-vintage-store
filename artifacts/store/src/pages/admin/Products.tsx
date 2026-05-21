@@ -177,12 +177,17 @@ export default function AdminProducts() {
                   <tr key={p.id} className="hover:bg-muted/30 transition-colors" data-testid={`row-product-${p.id}`}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-muted overflow-hidden shrink-0">
+                        <div className="relative w-10 h-10 rounded-lg bg-muted overflow-hidden shrink-0">
                           {p.images?.[0] ? <img src={p.images[0]} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">SV</div>}
+                          {p.videoUrl && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center" title="Has video">
+                              <Video size={12} className="text-white" />
+                            </div>
+                          )}
                         </div>
                         <div>
                           <p className="font-medium line-clamp-1">{p.name}</p>
-                          <p className="text-xs text-muted-foreground">Uncategorized</p>
+                          {p.videoUrl && <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">VIDEO</span>}
                         </div>
                       </div>
                     </td>

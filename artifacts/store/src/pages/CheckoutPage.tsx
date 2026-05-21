@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useCart } from "@/context/CartContext";
-import { useCreateOrder, useInitiatePayment, useGetSettings } from "@workspace/api-client-react";
+import { useCreateOrder, useInitiatePayment } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { CreditCard, Landmark, Truck } from "lucide-react";
+import { Truck } from "lucide-react";
 
 const NIGERIA_STATES = [
   "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno",
@@ -18,14 +18,13 @@ export default function CheckoutPage() {
   const { items, total, clearCart } = useCart();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { data: settings } = useGetSettings();
   const createOrder = useCreateOrder();
   const initiatePayment = useInitiatePayment();
 
   const [form, setForm] = useState({
     fullName: "", phone: "", email: "", address: "", city: "", state: "Lagos", country: "Nigeria",
   });
-  const [paymentMethod, setPaymentMethod] = useState<"korapay" | "transfer" | "delivery">("korapay");
+  const [paymentMethod, setPaymentMethod] = useState<"korapay" | "delivery">("korapay");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -76,7 +75,7 @@ export default function CheckoutPage() {
         });
       });
 
-      if (paymentMethod === "korapay" && settings?.korapayEnabled) {
+      if (paymentMethod === "korapay") {
         const payData = await new Promise<any>((resolve, reject) => {
           initiatePayment.mutate({
             data: {
@@ -135,7 +134,7 @@ export default function CheckoutPage() {
                 {errors.phone && <p className="text-xs text-destructive mt-1">{errors.phone}</p>}
               </div>
               <div>
-                <label className="text-sm font-medium mb-1 block">Email</label>
+                <label className="text-sm font-medium mb-1 block">Email {paymentMethod === "korapay" ? "*" : "(optional)"}</label>
                 <input
                   type="email"
                   value={form.email}
@@ -184,39 +183,38 @@ export default function CheckoutPage() {
 
           {/* Payment Method */}
           <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-            <h2 className="font-semibold text-lg flex items-center gap-2"><CreditCard size={18} /> Payment Method</h2>
+            <h2 className="font-semibold text-lg">Payment Method</h2>
             <div className="space-y-3">
-              {settings?.korapayEnabled && (
-                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${paymentMethod === "korapay" ? "border-primary bg-primary/5" : "border-border"}`}>
-                  <input
-                    type="radio"
-                    value="korapay"
-                    checked={paymentMethod === "korapay"}
-                    onChange={() => setPaymentMethod("korapay")}
-                    data-testid="radio-korapay"
-                  />
-                  <CreditCard size={18} className="text-primary" />
-                  <div>
-                    <p className="font-medium text-sm">Pay Online (Kora Pay)</p>
-                    <p className="text-xs text-muted-foreground">Card, bank transfer, USSD</p>
-                  </div>
-                </label>
-              )}
-              <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${paymentMethod === "transfer" ? "border-primary bg-primary/5" : "border-border"}`}>
+              {/* Korapay */}
+              <label
+                className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${paymentMethod === "korapay" ? "border-[#0D6B58] bg-[#0D6B58]/5" : "border-border hover:border-[#0D6B58]/40"}`}
+                data-testid="label-korapay"
+              >
                 <input
                   type="radio"
-                  value="transfer"
-                  checked={paymentMethod === "transfer"}
-                  onChange={() => setPaymentMethod("transfer")}
-                  data-testid="radio-transfer"
+                  value="korapay"
+                  checked={paymentMethod === "korapay"}
+                  onChange={() => setPaymentMethod("korapay")}
+                  className="accent-[#0D6B58]"
+                  data-testid="radio-korapay"
                 />
-                <Landmark size={18} className="text-primary" />
-                <div>
-                  <p className="font-medium text-sm">Bank Transfer</p>
-                  <p className="text-xs text-muted-foreground">Transfer to our account then send proof</p>
+                <div className="flex items-center gap-3 flex-1">
+                  <img src="/korapay-logo.svg" alt="Korapay" className="h-7 w-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  <div>
+                    <p className="font-semibold text-sm">Pay with Korapay</p>
+                    <p className="text-xs text-muted-foreground">Card, bank transfer, USSD & more</p>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <span className="text-[10px] bg-[#0D6B58]/10 text-[#0D6B58] font-semibold px-2 py-0.5 rounded">SECURE</span>
                 </div>
               </label>
-              <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${paymentMethod === "delivery" ? "border-primary bg-primary/5" : "border-border"}`}>
+
+              {/* Pay on Delivery */}
+              <label
+                className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${paymentMethod === "delivery" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
+                data-testid="label-delivery"
+              >
                 <input
                   type="radio"
                   value="delivery"
@@ -224,21 +222,27 @@ export default function CheckoutPage() {
                   onChange={() => setPaymentMethod("delivery")}
                   data-testid="radio-delivery"
                 />
-                <Truck size={18} className="text-primary" />
-                <div>
-                  <p className="font-medium text-sm">Pay on Delivery</p>
-                  <p className="text-xs text-muted-foreground">Cash on delivery (select areas)</p>
+                <div className="flex items-center gap-3 flex-1">
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Truck size={15} className="text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">Pay on Delivery</p>
+                    <p className="text-xs text-muted-foreground">Cash on delivery (select areas)</p>
+                  </div>
                 </div>
               </label>
             </div>
-            {paymentMethod === "transfer" && (
-              <div className="bg-muted rounded-lg p-4 text-sm space-y-1">
-                <p className="font-semibold">Bank Transfer Details</p>
-                <p>Bank: Your Bank Name</p>
-                <p>Account: 0000000000</p>
-                <p>Name: Shoplike Vintage</p>
-                <p className="text-muted-foreground mt-2">Send payment proof to WhatsApp: 09063172596</p>
-              </div>
+
+            {paymentMethod === "korapay" && (
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                You'll be redirected to Korapay's secure checkout to complete your payment. Your order will be confirmed after payment.
+              </p>
+            )}
+            {paymentMethod === "delivery" && (
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+                Pay in cash when your order arrives. Available in select areas. Our team will contact you to confirm delivery.
+              </p>
             )}
           </div>
 
@@ -253,7 +257,7 @@ export default function CheckoutPage() {
         </form>
 
         {/* Order Summary */}
-        <div className="bg-card border border-border rounded-xl p-6 h-fit">
+        <div className="bg-card border border-border rounded-xl p-6 h-fit sticky top-4">
           <h3 className="font-semibold mb-4">Order Summary</h3>
           <div className="space-y-3 mb-4">
             {items.map((item) => (
@@ -269,9 +273,23 @@ export default function CheckoutPage() {
               </div>
             ))}
           </div>
-          <div className="border-t border-border pt-3 flex justify-between font-bold">
-            <span>Total</span>
-            <span className="text-primary" data-testid="text-checkout-total">₦{total.toLocaleString()}</span>
+          <div className="border-t border-border pt-3 space-y-1">
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Subtotal</span>
+              <span>₦{total.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Delivery</span>
+              <span className="text-green-600 font-medium">Calculated at delivery</span>
+            </div>
+            <div className="flex justify-between font-bold text-base pt-2 border-t border-border mt-2">
+              <span>Total</span>
+              <span className="text-primary" data-testid="text-checkout-total">₦{total.toLocaleString()}</span>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+            <img src="/korapay-logo.svg" alt="Korapay" className="h-4 w-auto opacity-60" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <span>Secured by Korapay</span>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
   import { useLocation } from "wouter";
-  import { Eye, EyeOff, User, Mail, Lock, ArrowRight, CheckCircle } from "lucide-react";
+  import { Eye, EyeOff, User, Mail, Phone, Lock, ArrowRight, CheckCircle } from "lucide-react";
   import { Button } from "@/components/ui/button";
   import { useToast } from "@/hooks/use-toast";
 
@@ -32,7 +32,7 @@ import { useState } from "react";
     const { toast } = useToast();
 
     const [loginForm, setLoginForm] = useState({ email: "", password: "" });
-    const [signupForm, setSignupForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
+    const [signupForm, setSignupForm] = useState({ name: "", email: "", phone: "", password: "", confirmPassword: "" });
 
     const handleLogin = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -63,7 +63,7 @@ import { useState } from "react";
         const res = await fetch(`${BASE}/api/customers/signup`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: signupForm.name, email: signupForm.email, password: signupForm.password }),
+          body: JSON.stringify({ name: signupForm.name, email: signupForm.email, phone: signupForm.phone || undefined, password: signupForm.password }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Signup failed");
@@ -189,6 +189,16 @@ import { useState } from "react";
                       onChange={e => setSignupForm({ ...signupForm, email: e.target.value })}
                       className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground/30 transition-all"
                       placeholder="you@example.com" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block text-foreground">Phone Number</label>
+                  <div className="relative">
+                    <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input type="tel" value={signupForm.phone}
+                      onChange={e => setSignupForm({ ...signupForm, phone: e.target.value })}
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground/30 transition-all"
+                      placeholder="08012345678" />
                   </div>
                 </div>
                 <div>
