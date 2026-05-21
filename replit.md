@@ -1,6 +1,6 @@
-# [Project name]
+# Shoplike Vintage Store
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A vintage clothing e-commerce store powered by Supabase.
 
 ## Run & Operate
 
@@ -10,6 +10,22 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
+
+## Environment Variables
+
+All Supabase variables are stored as Replit Secrets (available at runtime):
+
+| Variable | Scope | Purpose |
+|---|---|---|
+| `SUPABASE_URL` | Server | Supabase project REST API URL |
+| `SUPABASE_PUBLISHABLE_KEY` | Server | Supabase anon/publishable key for server-side calls |
+| `VITE_SUPABASE_URL` | Frontend (Vite) | Supabase project URL exposed to the browser |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Frontend (Vite) | Supabase anon key exposed to the browser |
+| `VITE_SUPABASE_PROJECT_ID` | Frontend (Vite) | Supabase project ID (e.g. `afdgjlkivfhwqhjoaylg`) |
+
+Supabase project URL: `https://afdgjlkivfhwqhjoaylg.supabase.co`
+
+GitHub repo: `https://github.com/visibyltechnology/shoplike-vintage-store`
 
 ## Stack
 
