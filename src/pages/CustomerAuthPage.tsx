@@ -17,10 +17,9 @@ export function getCustomerUser(): any | null {
   const u = localStorage.getItem(USER_KEY);
   return u ? JSON.parse(u) : null;
 }
-export async function clearCustomerSession() {
+export function clearCustomerSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
-  await supabase.auth.signOut();
 }
 export function isCustomerLoggedIn(): boolean { return !!getCustomerToken(); }
 
@@ -42,17 +41,12 @@ export default function CustomerAuthPage({ mode = "login" }: { mode?: "login" | 
         email: loginForm.email,
         password: loginForm.password,
       });
-      if (error) throw new Error(error.message);
-      if (!data.user || !data.session) throw new Error("Login failed");
-      const meta = data.user.user_metadata ?? {};
-      const user = {
-        id: data.user.id,
-        email: data.user.email ?? loginForm.email,
-        name: meta.name || data.user.email?.split('@')[0] || 'User',
-        phone: meta.phone || null,
-      };
-      saveCustomerSession(data.session.access_token, user);
-      toast({ title: `Welcome back, ${user.name}!` });
+      if (error) throw error;
+      const user = data.user!;
+      const session = data.session!;
+      const customer = { id: user.id, email: user.email, name: user.user_metadata?.name || user.email };
+      saveCustomerSession(session.access_token, customer);
+      toast({ title: `Welcome back, ${customer.name}!` });
       setLocation("/account");
     } catch (err: any) {
       toast({ title: "Login failed", description: err.message, variant: "destructive" });
@@ -69,24 +63,26 @@ export default function CustomerAuthPage({ mode = "login" }: { mode?: "login" | 
       const { data, error } = await supabase.auth.signUp({
         email: signupForm.email,
         password: signupForm.password,
-        options: {
-          data: { name: signupForm.name, phone: signupForm.phone || null },
-        },
+        options: { data: { name: signupForm.name, phone: signupForm.phone } },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw error;
+      const user = data.user!;
+      // Save to user_profiles table
+      await supabase.from("user_profiles").upsert({
+        id: user.id,
+        email: signupForm.email,
+        name: signupForm.name,
+        phone: signupForm.phone || null,
+        is_restricted: false,
+      }, { onConflict: "id" });
+
       if (data.session) {
-        // Auto-confirmed
-        const user = {
-          id: data.user!.id,
-          email: data.user!.email ?? signupForm.email,
-          name: signupForm.name,
-          phone: signupForm.phone || null,
-        };
-        saveCustomerSession(data.session.access_token, user);
+        const customer = { id: user.id, email: user.email, name: signupForm.name };
+        saveCustomerSession(data.session.access_token, customer);
         toast({ title: `Welcome to Shoplike Vintage, ${signupForm.name}!` });
         setLocation("/account");
       } else {
-        toast({ title: "Account created!", description: "Check your email to confirm your account, then sign in." });
+        toast({ title: "Account created!", description: "Check your email to verify your account." });
         setView("login");
       }
     } catch (err: any) {
@@ -100,25 +96,29 @@ export default function CustomerAuthPage({ mode = "login" }: { mode?: "login" | 
       <div className="hidden lg:flex lg:w-[45%] bg-[#1a1a1a] flex-col items-center justify-center p-12 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "url(/logo.jpg)", backgroundSize: "cover", backgroundPosition: "center", filter: "blur(20px) saturate(0.5)" }} />
         <div className="relative z-10 text-center">
-          <div className="w-36 h-36 rounded-full overflow-hidden border-4 border-[#c9a96e] shadow-2xl mx-auto mb-6">
+          <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-[#c9a96e] shadow-2xl mx-auto mb-6">
             <img src="/logo.jpg" alt="Shoplike Vintage" className="w-full h-full object-cover" />
           </div>
           <p className="text-[#c9a96e] text-xs tracking-[5px] uppercase font-semibold mb-2">✦ Since 2024 ✦</p>
           <h1 className="text-white text-4xl font-bold tracking-wide mb-3">Shoplike<br />Vintage</h1>
-          <p className="text-white/50 text-sm leading-relaxed max-w-xs">Curated vintage & contemporary fashion for every story. Shop with confidence.</p>
+          <p className="text-white/50 text-sm leading-relaxed max-w-xs">
+            Curated vintage &amp; contemporary fashion for every story. Shop with confidence.
+          </p>
           <div className="mt-10 space-y-3">
             {["Free delivery on orders above ₦50,000", "Easy returns within 7 days", "Secure checkout"].map(t => (
               <div key={t} className="flex items-center gap-2 text-white/60 text-sm">
-                <CheckCircle size={14} className="text-[#c9a96e] shrink-0" /><span>{t}</span>
+                <CheckCircle size={14} className="text-[#c9a96e] shrink-0" />
+                <span>{t}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
+      {/* Right panel */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 bg-background">
         <div className="flex flex-col items-center mb-8 lg:hidden">
-          <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-[#c9a96e] shadow-lg mb-3">
+          <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-border shadow-md mb-3">
             <img src="/logo.jpg" alt="Shoplike Vintage" className="w-full h-full object-cover" />
           </div>
           <p className="font-bold text-lg tracking-wider text-foreground">SHOPLIKE VINTAGE</p>
@@ -154,27 +154,31 @@ export default function CustomerAuthPage({ mode = "login" }: { mode?: "login" | 
                   <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input type="email" required value={loginForm.email}
                     onChange={e => setLoginForm({ ...loginForm, email: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground/30 transition-all"
                     placeholder="you@example.com" />
                 </div>
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-sm font-medium text-foreground">Password</label>
-                  <a href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">Forgot password?</a>
+                  <a href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors">
+                    Forgot password?
+                  </a>
                 </div>
                 <div className="relative">
                   <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input type={showPw ? "text" : "password"} required value={loginForm.password}
                     onChange={e => setLoginForm({ ...loginForm, password: e.target.value })}
-                    className="w-full pl-10 pr-11 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all"
+                    className="w-full pl-10 pr-11 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground/30 transition-all"
                     placeholder="••••••••" />
-                  <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                  <button type="button" onClick={() => setShowPw(!showPw)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
               </div>
-              <Button type="submit" disabled={loading} className="w-full py-6 text-base font-semibold rounded-xl flex items-center justify-center gap-2 mt-2">
+              <Button type="submit" disabled={loading}
+                className="w-full py-6 text-base font-semibold rounded-xl flex items-center justify-center gap-2 mt-2">
                 {loading ? "Signing in..." : <><span>Sign In</span><ArrowRight size={18} /></>}
               </Button>
             </form>
@@ -186,7 +190,7 @@ export default function CustomerAuthPage({ mode = "login" }: { mode?: "login" | 
                   <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input type="text" required value={signupForm.name}
                     onChange={e => setSignupForm({ ...signupForm, name: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground/30 transition-all"
                     placeholder="Your full name" />
                 </div>
               </div>
@@ -196,7 +200,7 @@ export default function CustomerAuthPage({ mode = "login" }: { mode?: "login" | 
                   <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input type="email" required value={signupForm.email}
                     onChange={e => setSignupForm({ ...signupForm, email: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground/30 transition-all"
                     placeholder="you@example.com" />
                 </div>
               </div>
@@ -206,19 +210,22 @@ export default function CustomerAuthPage({ mode = "login" }: { mode?: "login" | 
                   <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input type="tel" value={signupForm.phone}
                     onChange={e => setSignupForm({ ...signupForm, phone: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground/30 transition-all"
                     placeholder="08012345678" />
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block text-foreground">Password <span className="text-muted-foreground font-normal">(min 6 characters)</span></label>
+                <label className="text-sm font-medium mb-1.5 block text-foreground">
+                  Password <span className="text-muted-foreground font-normal">(min 6 characters)</span>
+                </label>
                 <div className="relative">
                   <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input type={showPw ? "text" : "password"} required minLength={6} value={signupForm.password}
                     onChange={e => setSignupForm({ ...signupForm, password: e.target.value })}
-                    className="w-full pl-10 pr-11 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all"
+                    className="w-full pl-10 pr-11 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground/30 transition-all"
                     placeholder="Choose a strong password" />
-                  <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                  <button type="button" onClick={() => setShowPw(!showPw)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
                     {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
@@ -229,24 +236,30 @@ export default function CustomerAuthPage({ mode = "login" }: { mode?: "login" | 
                   <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <input type={showPw ? "text" : "password"} required value={signupForm.confirmPassword}
                     onChange={e => setSignupForm({ ...signupForm, confirmPassword: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground/30 transition-all"
                     placeholder="••••••••" />
                 </div>
               </div>
-              <Button type="submit" disabled={loading} className="w-full py-6 text-base font-semibold rounded-xl flex items-center justify-center gap-2 mt-2">
+              <Button type="submit" disabled={loading}
+                className="w-full py-6 text-base font-semibold rounded-xl flex items-center justify-center gap-2 mt-2">
                 {loading ? "Creating account..." : <><span>Create Account</span><ArrowRight size={18} /></>}
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                By creating an account you agree to our <span className="underline cursor-pointer">Terms & Privacy Policy</span>.
+                By creating an account you agree to our{" "}
+                <span className="underline cursor-pointer">Terms &amp; Privacy Policy</span>.
               </p>
             </form>
           )}
 
           <p className="text-center text-sm text-muted-foreground mt-6">
             {view === "login" ? (
-              <>Don't have an account?{" "}<button onClick={() => setView("signup")} className="text-foreground font-semibold hover:underline">Sign up free</button></>
+              <>Don't have an account?{" "}
+                <button onClick={() => setView("signup")} className="text-foreground font-semibold hover:underline">Sign up free</button>
+              </>
             ) : (
-              <>Already have an account?{" "}<button onClick={() => setView("login")} className="text-foreground font-semibold hover:underline">Sign in</button></>
+              <>Already have an account?{" "}
+                <button onClick={() => setView("login")} className="text-foreground font-semibold hover:underline">Sign in</button>
+              </>
             )}
           </p>
         </div>

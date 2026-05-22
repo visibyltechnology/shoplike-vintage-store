@@ -32,6 +32,7 @@ import AdminCategories from "@/pages/admin/Categories";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminUsers from "@/pages/admin/Users";
 import AdminPayments from "@/pages/admin/Payments";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
 setAuthTokenGetter(() => getAdminToken());
 
@@ -87,6 +88,7 @@ function App() {
                 <Router />
               </WouterRouter>
               <Toaster />
+              <PWAInstallPrompt />
             </TooltipProvider>
           </WishlistProvider>
         </CartProvider>

@@ -1,16 +1,9 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
-import { ChevronRight, Clock, Zap, Percent, Star, ShoppingCart, MessageCircle } from "lucide-react";
-import {
-  useGetFeaturedProducts,
-  useGetCategories,
-  useGetProducts,
-} from "@/lib/api-client";
+import { ChevronRight, Clock, Zap, Percent, MessageCircle } from "lucide-react";
+import { useProducts, useFeaturedProducts } from "@/lib/use-products";
 import ProductCard from "@/components/ProductCard";
-  import { resolveUrl } from "@/lib/api-url";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { useCart } from "@/context/CartContext";
 
 const HERO_SLIDES = [
   {
@@ -87,11 +80,10 @@ function CountdownTimer() {
 }
 
 function FlashDealCard({ product }: { product: any }) {
-  const { addItem } = useCart();
   const discount = product.comparePrice
     ? Math.round(((product.comparePrice - product.price) / product.comparePrice) * 100)
     : null;
-  const img = resolveUrl(product.images?.[0] ?? null);
+  const img = product.images?.[0] ?? null;
   return (
     <Link href={`/product/${product.id}`}>
       <div className="group bg-card border border-border rounded-xl overflow-hidden hover:shadow-lg transition-all hover:-translate-y-1 cursor-pointer">
@@ -101,7 +93,7 @@ function FlashDealCard({ product }: { product: any }) {
           ) : (
             <div className="w-full h-full flex items-center justify-center text-4xl font-serif text-muted-foreground">SV</div>
           )}
-          {discount && (
+          {discount != null && discount > 0 && (
             <div className="absolute top-2 left-2 bg-accent text-accent-foreground text-xs font-bold px-2 py-1 rounded-lg">
               -{discount}%
             </div>
@@ -134,24 +126,23 @@ function FlashDealCard({ product }: { product: any }) {
 
 export default function HomePage() {
   const [slide, setSlide] = useState(0);
-  const { data: featured, isLoading: featLoading } = useGetFeaturedProducts();
-  const { data: categories } = useGetCategories();
-  const { data: saleProducts } = useGetProducts({ page: 1, limit: 8 });
-  const { data: maleProducts } = useGetProducts({ section: "male", page: 1, limit: 4 });
-  const { data: femaleProducts } = useGetProducts({ section: "female", page: 1, limit: 4 });
-  const { data: kidsProducts } = useGetProducts({ section: "children", page: 1, limit: 4 });
+  const { data: featured, isLoading: featLoading } = useFeaturedProducts();
+  const { data: maleData } = useProducts({ section: "male", page: 1, limit: 4 });
+  const { data: femaleData } = useProducts({ section: "female", page: 1, limit: 4 });
+  const { data: kidsData } = useProducts({ section: "children", page: 1, limit: 4 });
 
-  // Auto-advance hero
   useEffect(() => {
     const iv = setInterval(() => setSlide((s) => (s + 1) % HERO_SLIDES.length), 5000);
     return () => clearInterval(iv);
   }, []);
 
   const hero = HERO_SLIDES[slide];
+  const maleProducts = maleData?.products ?? [];
+  const femaleProducts = femaleData?.products ?? [];
+  const kidsProducts = kidsData?.products ?? [];
 
   return (
     <div className="bg-background">
-      {/* Main layout: sidebar + content */}
       <div className="max-w-[1400px] mx-auto px-3 py-4">
         <div className="flex gap-4">
           {/* Category Sidebar */}
@@ -165,16 +156,12 @@ export default function HomePage() {
                   key={i}
                   href={cat.href}
                   className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-muted hover:text-primary transition-colors border-b border-border last:border-0"
-                  data-testid={`link-sidebar-cat-${i}`}
                 >
                   <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${cat.section === "male" ? "bg-primary" : cat.section === "female" ? "bg-accent" : "bg-green-500"}`} />
                   {cat.label}
                 </Link>
               ))}
-              <Link
-                href="/shop"
-                className="flex items-center justify-center gap-1 px-4 py-3 text-xs text-primary font-semibold hover:bg-muted transition-colors"
-              >
+              <Link href="/shop" className="flex items-center justify-center gap-1 px-4 py-3 text-xs text-primary font-semibold hover:bg-muted transition-colors">
                 View All Categories <ChevronRight size={12} />
               </Link>
             </div>
@@ -186,14 +173,12 @@ export default function HomePage() {
               className={`relative rounded-2xl overflow-hidden bg-gradient-to-r ${hero.gradient} text-white`}
               style={{ minHeight: "340px" }}
             >
-              {/* Background image */}
               <img
                 src={hero.img}
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover opacity-60"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
               />
-              {/* Content */}
               <div className="relative z-10 flex flex-col justify-center h-full p-8 md:p-12 max-w-lg">
                 <div
                   className="inline-block text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-3"
@@ -206,65 +191,73 @@ export default function HomePage() {
                 </h1>
                 <p className="text-2xl md:text-3xl font-bold text-white mb-3">{hero.subtitle}</p>
                 <p className="text-white/80 text-sm mb-6 leading-relaxed">{hero.body}</p>
-                <div className="flex items-center gap-4">
-                  <Link
-                    href={hero.href}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm transition-all hover:scale-105"
-                    style={{ backgroundColor: hero.accentColor, color: "#1a1a1a" }}
-                    data-testid={`link-hero-cta-${slide}`}
-                  >
-                    {hero.cta} <ChevronRight size={16} />
-                  </Link>
-                </div>
+                <Link
+                  href={hero.href}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm transition-all hover:scale-105 w-fit"
+                  style={{ backgroundColor: hero.accentColor, color: "#1a1a1a" }}
+                >
+                  {hero.cta} <ChevronRight size={16} />
+                </Link>
               </div>
-
-              {/* Decorative discount badge */}
               <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden md:flex flex-col items-center">
-                <div className="relative">
-                  <div
-                    className="w-32 h-32 rounded-full flex flex-col items-center justify-center border-4 border-dashed"
-                    style={{ borderColor: hero.accentColor }}
-                  >
-                    <Percent size={20} style={{ color: hero.accentColor }} />
-                    <span className="text-3xl font-black" style={{ color: hero.accentColor }}>40</span>
-                    <span className="text-xs text-white font-semibold">% OFF</span>
-                  </div>
+                <div
+                  className="w-32 h-32 rounded-full flex flex-col items-center justify-center border-4 border-dashed"
+                  style={{ borderColor: hero.accentColor }}
+                >
+                  <Percent size={20} style={{ color: hero.accentColor }} />
+                  <span className="text-3xl font-black" style={{ color: hero.accentColor }}>40</span>
+                  <span className="text-xs text-white font-semibold">% OFF</span>
                 </div>
                 <p className="text-white/60 text-xs mt-2 text-center">On select items</p>
               </div>
-
-              {/* Slide dots */}
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
                 {HERO_SLIDES.map((_, i) => (
                   <button
                     key={i}
                     onClick={() => setSlide(i)}
                     className={`h-2 rounded-full transition-all ${i === slide ? "w-6 bg-secondary" : "w-2 bg-white/40"}`}
-                    data-testid={`button-hero-dot-${i}`}
                   />
                 ))}
               </div>
             </div>
 
-            {/* Quick section links below hero */}
+            {/* Section cards — real Unsplash images */}
             <div className="grid grid-cols-3 gap-3 mt-3">
               {[
-                { label: "Men", sub: "Latest styles", href: "/shop/male", color: "bg-primary", img: "/uploads/mens-suit.jpg" },
-                { label: "Women", sub: "New arrivals", href: "/shop/female", color: "bg-accent", img: "/uploads/womens-dress.jpg" },
-                { label: "Children", sub: "Kids fashion", href: "/shop/children", color: "bg-green-600", img: "/uploads/kids-set.jpg" },
+                {
+                  label: "Men",
+                  sub: "Latest styles",
+                  href: "/shop/male",
+                  color: "bg-primary",
+                  img: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=400&auto=format&fit=crop",
+                },
+                {
+                  label: "Women",
+                  sub: "New arrivals",
+                  href: "/shop/female",
+                  color: "bg-accent",
+                  img: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400&auto=format&fit=crop",
+                },
+                {
+                  label: "Children",
+                  sub: "Kids fashion",
+                  href: "/shop/children",
+                  color: "bg-green-600",
+                  img: "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?w=400&auto=format&fit=crop",
+                },
               ].map((item) => (
-                <Link key={item.href} href={item.href}
+                <Link
+                  key={item.href}
+                  href={item.href}
                   className="relative rounded-xl overflow-hidden group cursor-pointer"
                   style={{ minHeight: "90px" }}
-                  data-testid={`link-section-card-${item.label.toLowerCase()}`}
                 >
                   <img
                     src={item.img}
                     alt={item.label}
                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
-                  <div className={`absolute inset-0 ${item.color} opacity-70`} />
+                  <div className={`absolute inset-0 ${item.color} opacity-60`} />
                   <div className="relative z-10 h-full flex flex-col items-center justify-center text-white p-3">
                     <span className="font-bold text-lg">{item.label}</span>
                     <span className="text-xs opacity-90">{item.sub}</span>
@@ -276,10 +269,9 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Flash Deals / Great Deals */}
+      {/* Great Deals */}
       <section className="max-w-[1400px] mx-auto px-3 py-6">
         <div className="bg-card border border-border rounded-2xl overflow-hidden">
-          {/* Section header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <div className="flex items-center gap-3">
               <div className="bg-accent text-accent-foreground p-2 rounded-lg">
@@ -301,7 +293,6 @@ export default function HomePage() {
               </Link>
             </div>
           </div>
-          {/* Products grid */}
           <div className="p-4">
             {featLoading ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -309,20 +300,22 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {(Array.isArray(featured) ? featured : []).slice(0, 10).map((p) => <FlashDealCard key={p.id} product={p} />)}
+                {(Array.isArray(featured) ? featured : []).slice(0, 10).map((p) => (
+                  <FlashDealCard key={p.id} product={p} />
+                ))}
               </div>
             )}
           </div>
         </div>
       </section>
 
-      {/* Promotional banners row */}
+      {/* Promotional banners */}
       <section className="max-w-[1400px] mx-auto px-3 pb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             { title: "Wholesale Pricing", sub: "Min. order 5 pieces", color: "from-primary to-teal-600", icon: "🏷️" },
             { title: "Fast Delivery", sub: "Nigeria-wide shipping", color: "from-secondary to-amber-500", icon: "🚚" },
-            { title: "WhatsApp Order", sub: "Chat: 09063172596", color: "from-green-600 to-green-700", icon: "💬" },
+            { title: "WhatsApp Orders", sub: "Chat with us anytime", color: "from-green-600 to-green-700", icon: "💬" },
           ].map((b, i) => (
             <div key={i} className={`bg-gradient-to-r ${b.color} text-white rounded-xl p-5 flex items-center gap-4`}>
               <span className="text-3xl">{b.icon}</span>
@@ -336,7 +329,7 @@ export default function HomePage() {
       </section>
 
       {/* Men's Section */}
-      {maleProducts?.products?.length ? (
+      {maleProducts.length > 0 && (
         <section className="max-w-[1400px] mx-auto px-3 pb-6">
           <div className="bg-card border border-border rounded-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -347,19 +340,19 @@ export default function HomePage() {
                   <p className="text-xs text-muted-foreground">Shirts, suits, casuals & more</p>
                 </div>
               </div>
-              <Link href="/shop/male" className="text-primary text-sm font-semibold flex items-center gap-1 hover:underline" data-testid="link-view-all-men">
+              <Link href="/shop/male" className="text-primary text-sm font-semibold flex items-center gap-1 hover:underline">
                 View All <ChevronRight size={14} />
               </Link>
             </div>
             <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {maleProducts.products.map((p) => <ProductCard key={p.id} product={p} />)}
+              {maleProducts.map((p) => <ProductCard key={p.id} product={p} />)}
             </div>
           </div>
         </section>
-      ) : null}
+      )}
 
       {/* Women's Section */}
-      {femaleProducts?.products?.length ? (
+      {femaleProducts.length > 0 && (
         <section className="max-w-[1400px] mx-auto px-3 pb-6">
           <div className="bg-card border border-border rounded-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -370,19 +363,19 @@ export default function HomePage() {
                   <p className="text-xs text-muted-foreground">Dresses, tops, skirts & more</p>
                 </div>
               </div>
-              <Link href="/shop/female" className="text-primary text-sm font-semibold flex items-center gap-1 hover:underline" data-testid="link-view-all-women">
+              <Link href="/shop/female" className="text-primary text-sm font-semibold flex items-center gap-1 hover:underline">
                 View All <ChevronRight size={14} />
               </Link>
             </div>
             <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {femaleProducts.products.map((p) => <ProductCard key={p.id} product={p} />)}
+              {femaleProducts.map((p) => <ProductCard key={p.id} product={p} />)}
             </div>
           </div>
         </section>
-      ) : null}
+      )}
 
       {/* Children's Section */}
-      {kidsProducts?.products?.length ? (
+      {kidsProducts.length > 0 && (
         <section className="max-w-[1400px] mx-auto px-3 pb-6">
           <div className="bg-card border border-border rounded-2xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -393,18 +386,18 @@ export default function HomePage() {
                   <p className="text-xs text-muted-foreground">Sets, dresses, casuals & more</p>
                 </div>
               </div>
-              <Link href="/shop/children" className="text-primary text-sm font-semibold flex items-center gap-1 hover:underline" data-testid="link-view-all-kids">
+              <Link href="/shop/children" className="text-primary text-sm font-semibold flex items-center gap-1 hover:underline">
                 View All <ChevronRight size={14} />
               </Link>
             </div>
             <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {kidsProducts.products.map((p) => <ProductCard key={p.id} product={p} />)}
+              {kidsProducts.map((p) => <ProductCard key={p.id} product={p} />)}
             </div>
           </div>
         </section>
-      ) : null}
+      )}
 
-      {/* WhatsApp CTA Banner */}
+      {/* WhatsApp CTA */}
       <section className="max-w-[1400px] mx-auto px-3 pb-8">
         <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-2xl p-8 flex flex-col md:flex-row items-center justify-between gap-4 text-white">
           <div>
@@ -416,10 +409,9 @@ export default function HomePage() {
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 bg-white text-green-700 font-bold px-8 py-4 rounded-full hover:bg-green-50 transition-colors whitespace-nowrap"
-            data-testid="link-whatsapp-cta-banner"
           >
             <MessageCircle size={20} />
-            Chat Now: 09063172596
+            Chat with us on WhatsApp
           </a>
         </div>
       </section>
