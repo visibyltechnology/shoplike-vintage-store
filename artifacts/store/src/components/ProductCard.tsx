@@ -4,6 +4,7 @@ import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+  import { resolveUrl } from "@/lib/api-url";
 
 interface Product {
   id: number;
@@ -24,7 +25,7 @@ export default function ProductCard({ product }: { product: Product }) {
   const { addItem } = useCart();
   const { toggleItem, isInWishlist } = useWishlist();
   const { toast } = useToast();
-  const imageUrl = product.images?.[0] || null;
+  const imageUrl = resolveUrl(product.images?.[0] ?? null);
   const discount = product.comparePrice
     ? Math.round(((product.comparePrice - product.price) / product.comparePrice) * 100)
     : null;
