@@ -5,6 +5,7 @@ import { useWishlist } from "@/context/WishlistContext";
 import { useCart } from "@/context/CartContext";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { resolveUrl } from "@/lib/api-url";
 
 export default function WishlistPage() {
   const { items, removeItem, clear } = useWishlist();
@@ -12,14 +13,14 @@ export default function WishlistPage() {
   const { toast } = useToast();
 
   const handleAddToCart = (item: typeof items[0]) => {
-    addItem({ productId: item.id, name: item.name, price: item.price, qty: 1, imageUrl: item.images?.[0] ?? null });
+    addItem({ productId: item.id, name: item.name, price: item.price, qty: 1, imageUrl: resolveUrl(item.images?.[0] ?? null) });
     toast({ title: "Added to cart", description: item.name });
   };
 
   const handleMoveAllToCart = () => {
     items.forEach((item) => {
       if (item.inStock) {
-        addItem({ productId: item.id, name: item.name, price: item.price, qty: 1, imageUrl: item.images?.[0] ?? null });
+        addItem({ productId: item.id, name: item.name, price: item.price, qty: 1, imageUrl: resolveUrl(item.images?.[0] ?? null) });
       }
     });
     clear();
@@ -64,7 +65,7 @@ export default function WishlistPage() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {items.map((item) => {
-            const imageUrl = item.images?.[0] || null;
+            const imageUrl = resolveUrl(item.images?.[0] ?? null);
             const discount = item.comparePrice
               ? Math.round(((item.comparePrice - item.price) / item.comparePrice) * 100)
               : null;
