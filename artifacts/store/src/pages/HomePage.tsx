@@ -7,6 +7,7 @@ import {
   useGetProducts,
 } from "@workspace/api-client-react";
 import ProductCard from "@/components/ProductCard";
+  import { resolveUrl } from "@/lib/api-url";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useCart } from "@/context/CartContext";
@@ -90,7 +91,7 @@ function FlashDealCard({ product }: { product: any }) {
   const discount = product.comparePrice
     ? Math.round(((product.comparePrice - product.price) / product.comparePrice) * 100)
     : null;
-  const img = product.images?.[0];
+  const img = resolveUrl(product.images?.[0] ?? null);
   return (
     <Link href={`/product/${product.id}`}>
       <div className="group bg-card border border-border rounded-xl overflow-hidden hover:shadow-lg transition-all hover:-translate-y-1 cursor-pointer">
