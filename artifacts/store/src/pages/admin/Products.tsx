@@ -214,11 +214,11 @@ export default function AdminProducts() {
           </table>
         </div>
         {/* Pagination */}
-        {data && data.total > 20 && (
+        {data && data.total > 10 && (
           <div className="flex justify-center gap-2 p-4 border-t border-border">
             <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} data-testid="button-prev-products">Previous</Button>
-            <span className="flex items-center text-sm px-2">Page {page} of {Math.ceil(data.total / 20)}</span>
-            <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(data.total / 20)} data-testid="button-next-products">Next</Button>
+            <span className="flex items-center text-sm px-2">Page {page} of {Math.ceil(data.total / 10)}</span>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(data.total / 10)} data-testid="button-next-products">Next</Button>
           </div>
         )}
       </div>
