@@ -4,7 +4,7 @@ import { useState } from "react";
   import { Button } from "@/components/ui/button";
   import { useToast } from "@/hooks/use-toast";
 
-  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
 
   const TOKEN_KEY = "sv_customer_token";
   const USER_KEY = "sv_customer_user";
@@ -38,7 +38,7 @@ import { useState } from "react";
       e.preventDefault();
       setLoading(true);
       try {
-        const res = await fetch(`${BASE}/api/customers/login`, {
+        const res = await fetch(`${API_BASE}/api/customers/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: loginForm.email, password: loginForm.password }),
@@ -60,7 +60,7 @@ import { useState } from "react";
       }
       setLoading(true);
       try {
-        const res = await fetch(`${BASE}/api/customers/signup`, {
+        const res = await fetch(`${API_BASE}/api/customers/signup`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: signupForm.name, email: signupForm.email, phone: signupForm.phone || undefined, password: signupForm.password }),
