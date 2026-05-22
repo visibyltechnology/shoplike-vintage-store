@@ -1,0 +1,7 @@
+{
+    "installCommand": "npm install -g pnpm@9 --force && pnpm install",
+    "buildCommand": "pnpm --filter @workspace/store run build",
+    "outputDirectory": "artifacts/store/dist/public",
+    "framework": null
+  }
+  
