@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { resolveUrl } from "@/lib/api-url";
 
 interface LocalReview {
   id: number;
@@ -53,7 +54,7 @@ export default function ProductPage() {
     return <div className="text-center py-20 text-muted-foreground">Product not found</div>;
   }
 
-  const images = product.images ?? [];
+  const images = (product.images ?? []).map(u => resolveUrl(u) ?? u);
   const discount = product.comparePrice
     ? Math.round(((product.comparePrice - product.price) / product.comparePrice) * 100)
     : null;
