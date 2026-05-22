@@ -308,7 +308,7 @@ export default function HomePage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {(featured || []).slice(0, 10).map((p) => <FlashDealCard key={p.id} product={p} />)}
+                {(Array.isArray(featured) ? featured : []).slice(0, 10).map((p) => <FlashDealCard key={p.id} product={p} />)}
               </div>
             )}
           </div>
