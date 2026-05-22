@@ -4,7 +4,7 @@
     "outputDirectory": "artifacts/store/dist/public",
     "framework": null,
     "rewrites": [
-      { "source": "/((?!api/).*)", "destination": "/index.html" }
+      { "source": "/(.*)", "destination": "/index.html" }
     ]
   }
   
