@@ -28,7 +28,7 @@ const emptyForm: ProductForm = {
 export default function AdminProducts() {
   const [page, setPage] = useState(1);
   const [sectionFilter, setSectionFilter] = useState("");
-  const { data, isLoading } = useGetProducts({ section: sectionFilter || undefined, page, limit: 20 });
+  const { data, isLoading } = useGetProducts({ section: sectionFilter || undefined, page, limit: 10 });
   const { data: categories } = useGetCategories();
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
