@@ -4,8 +4,16 @@ import { ShoppingCart, Search, Sun, Moon, Menu, X, MessageCircle, User, Package,
 import { useTheme } from "@/components/theme-provider";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
-import { useGetSettings } from "@/lib/api-client";
+
 import { isCustomerLoggedIn, getCustomerUser } from "@/pages/CustomerAuthPage";
+import PromoBanner from "@/components/PromoBanner";
+
+function loadLocalSettings() {
+  try {
+    const s = localStorage.getItem("sv_store_settings");
+    return s ? JSON.parse(s) : null;
+  } catch { return null; }
+}
 const logoPath = "/logo.jpg";
 
 const sections = [
@@ -24,7 +32,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [, setLocation] = useLocation();
-  const { data: settings } = useGetSettings();
+  const [settings] = useState(() => loadLocalSettings());
   const loggedIn = isCustomerLoggedIn();
   const customer = getCustomerUser();
 
@@ -41,6 +49,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
+      <PromoBanner />
       {settings?.bannerEnabled && settings?.bannerText && (
         <div className="bg-primary text-primary-foreground text-center py-2 px-4 text-sm font-medium tracking-wide">
           {settings.bannerText}
