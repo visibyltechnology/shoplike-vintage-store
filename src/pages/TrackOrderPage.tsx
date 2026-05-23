@@ -2,34 +2,33 @@ import { useState } from "react";
 import { Search, Package, Truck, CheckCircle, Clock, XCircle, Download, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+import { supabase } from "@/lib/supabase";
 
 const STATUS_STEPS = [
-  { key: "pending", label: "Order Placed", icon: Clock },
-  { key: "confirmed", label: "Confirmed", icon: CheckCircle },
-  { key: "processing", label: "Processing", icon: Package },
-  { key: "shipped", label: "Shipped", icon: Truck },
-  { key: "delivered", label: "Delivered", icon: CheckCircle },
+  { key: "pending",    label: "Order Placed", icon: Clock },
+  { key: "confirmed",  label: "Confirmed",    icon: CheckCircle },
+  { key: "processing", label: "Processing",   icon: Package },
+  { key: "shipped",    label: "Shipped",      icon: Truck },
+  { key: "delivered",  label: "Delivered",    icon: CheckCircle },
 ];
 
 const STATUS_COLOR: Record<string, string> = {
-  pending: "text-yellow-600 bg-yellow-50 border-yellow-200",
-  confirmed: "text-blue-600 bg-blue-50 border-blue-200",
+  pending:    "text-yellow-600 bg-yellow-50 border-yellow-200",
+  confirmed:  "text-blue-600 bg-blue-50 border-blue-200",
   processing: "text-purple-600 bg-purple-50 border-purple-200",
-  shipped: "text-indigo-600 bg-indigo-50 border-indigo-200",
-  delivered: "text-green-600 bg-green-50 border-green-200",
-  cancelled: "text-red-600 bg-red-50 border-red-200",
+  shipped:    "text-indigo-600 bg-indigo-50 border-indigo-200",
+  delivered:  "text-green-600 bg-green-50 border-green-200",
+  cancelled:  "text-red-600 bg-red-50 border-red-200",
 };
 
 function getStepIndex(status: string) {
-  const idx = STATUS_STEPS.findIndex((s) => s.key === status);
+  const idx = STATUS_STEPS.findIndex(s => s.key === status);
   return idx === -1 ? 0 : idx;
 }
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("en-NG", {
-    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit"
+function formatDate(d: string) {
+  return new Date(d).toLocaleDateString("en-NG", {
+    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
 
@@ -37,72 +36,20 @@ function printReceipt(order: any) {
   const win = window.open("", "_blank", "width=600,height=800");
   if (!win) return;
   const items = Array.isArray(order.items) ? order.items : [];
-  win.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Receipt - ${order.orderRef}</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 40px; color: #111; }
-        h1 { font-size: 24px; margin-bottom: 4px; }
-        .subtitle { color: #666; font-size: 14px; margin-bottom: 24px; }
-        table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-        th { background: #f4f4f4; padding: 8px 12px; text-align: left; font-size: 13px; border-bottom: 2px solid #e0e0e0; }
-        td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
-        .total-row td { font-weight: bold; font-size: 15px; border-top: 2px solid #333; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
-        .info-box { background: #f9f9f9; padding: 12px; border-radius: 8px; }
-        .info-box h3 { font-size: 12px; color: #888; text-transform: uppercase; margin: 0 0 8px; }
-        .info-box p { margin: 2px 0; font-size: 13px; }
-        .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; background: #e8f5e9; color: #2e7d32; }
-        @media print { body { padding: 20px; } }
-      </style>
-    </head>
-    <body>
-      <h1>🛍 Shoplike Vintage</h1>
-      <p class="subtitle">Order Receipt</p>
-      <div class="info-grid">
-        <div class="info-box">
-          <h3>Order Info</h3>
-          <p><b>Ref:</b> ${order.orderRef}</p>
-          <p><b>Date:</b> ${formatDate(order.createdAt)}</p>
-          <p><b>Status:</b> <span class="badge">${order.status}</span></p>
-          <p><b>Payment:</b> ${order.paymentStatus}</p>
-        </div>
-        <div class="info-box">
-          <h3>Delivery To</h3>
-          <p>${order.customerName}</p>
-          <p>${order.customerPhone}</p>
-          ${order.customerEmail ? `<p>${order.customerEmail}</p>` : ""}
-          <p>${order.shippingAddress?.address || ""}</p>
-          <p>${order.shippingAddress?.city || ""}, ${order.shippingAddress?.state || ""}</p>
-        </div>
-      </div>
-      <table>
-        <thead>
-          <tr><th>Item</th><th>Size</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr>
-        </thead>
-        <tbody>
-          ${items.map((i: any) => `
-            <tr>
-              <td>${i.name}</td>
-              <td>${i.size || "-"}</td>
-              <td>${i.qty}</td>
-              <td>₦${Number(i.price).toLocaleString()}</td>
-              <td>₦${(i.price * i.qty).toLocaleString()}</td>
-            </tr>
-          `).join("")}
-          <tr class="total-row">
-            <td colspan="4">Total</td>
-            <td>₦${Number(order.total).toLocaleString()}</td>
-          </tr>
-        </tbody>
-      </table>
-      <p style="color:#888;font-size:12px;margin-top:32px;">Thank you for shopping with Shoplike Vintage! For enquiries call/WhatsApp: 09063172596</p>
-      <script>window.onload = () => { window.print(); }</script>
-    </body>
-    </html>
-  `);
+  win.document.write(`<!DOCTYPE html><html><head><title>Receipt - ${order.order_ref}</title>
+    <style>body{font-family:Arial;padding:40px;color:#111}h1{color:#be185d}table{width:100%;border-collapse:collapse;margin:16px 0}
+    th{background:#be185d;color:#fff;padding:8px}td{padding:8px;border-bottom:1px solid #eee}.total{font-weight:bold;color:#be185d}
+    </style></head><body>
+    <h1>SHOPLIKE VINTAGE</h1><h3>Order: ${order.order_ref}</h3>
+    <p><b>${order.customer_name}</b> · ${order.customer_phone||""} · ${order.customer_email||""}</p>
+    <p>${order.shipping_address?.address||""}, ${order.shipping_address?.city||""}, ${order.shipping_address?.state||""}</p>
+    <table><thead><tr><th>Item</th><th>Size</th><th>Qty</th><th>Price</th></tr></thead><tbody>
+    ${items.map((i:any)=>`<tr><td>${i.name}</td><td>${i.size||"–"}</td><td>${i.qty}</td><td>₦${(i.price*i.qty).toLocaleString()}</td></tr>`).join("")}
+    <tr><td colspan="3" class="total" style="text-align:right">Total</td><td class="total">₦${Number(order.total).toLocaleString()}</td></tr>
+    </tbody></table>
+    <p>Status: ${order.status} · Payment: ${order.payment_status}</p>
+    <p style="margin-top:32px;font-size:12px;color:#888">Thank you for shopping with Shoplike Vintage! WhatsApp: 09063172596</p>
+    <script>window.onload=()=>{window.print()}</script></body></html>`);
   win.document.close();
 }
 
@@ -110,153 +57,153 @@ export default function TrackOrderPage() {
   const [ref, setRef] = useState("");
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
   const { toast } = useToast();
 
   const handleTrack = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ref.trim()) return;
     setLoading(true);
-    setError("");
     setOrder(null);
+    setNotFound(false);
     try {
-      const res = await fetch(`${BASE}/api/orders/track?ref=${encodeURIComponent(ref.trim())}`);
-      if (!res.ok) {
-        setError("Order not found. Please check the reference and try again.");
-        return;
-      }
-      const data = await res.json();
-      setOrder(data);
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("order_ref", ref.trim())
+        .single();
+      if (error || !data) { setNotFound(true); }
+      else { setOrder(data); }
     } catch {
-      setError("Failed to connect. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+      toast({ title: "Error", description: "Could not fetch order. Please try again.", variant: "destructive" });
+    } finally { setLoading(false); }
   };
 
-  const stepIndex = order ? getStepIndex(order.status) : -1;
+  const stepIdx = order ? getStepIndex(order.status) : -1;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10">
-      <div className="text-center mb-8">
+    <div className="max-w-2xl mx-auto px-4 py-12">
+      <div className="text-center mb-10">
         <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
           <Package size={32} className="text-primary" />
         </div>
         <h1 className="text-3xl font-serif font-bold mb-2">Track Your Order</h1>
-        <p className="text-muted-foreground">Enter your order reference to see the latest status.</p>
+        <p className="text-muted-foreground">Enter your order reference number to see your delivery status.</p>
       </div>
 
-      <form onSubmit={handleTrack} className="flex gap-3 mb-8">
+      <form onSubmit={handleTrack} className="flex gap-2 mb-8">
         <input
           value={ref}
-          onChange={(e) => setRef(e.target.value)}
-          placeholder="e.g. SLV-1747123456-ABCD"
+          onChange={e => setRef(e.target.value)}
+          placeholder="e.g. SV-1716123456789-AB12"
           className="flex-1 px-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          data-testid="input-track-ref"
         />
-        <Button type="submit" disabled={loading} className="px-6 py-3">
-          <Search size={18} className="mr-2" />
-          {loading ? "Searching..." : "Track"}
+        <Button type="submit" disabled={loading} className="px-6 rounded-xl" data-testid="button-track-order">
+          {loading ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> : <Search size={18} />}
         </Button>
       </form>
 
-      {error && (
-        <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 flex items-center gap-3 mb-6">
-          <XCircle size={20} className="text-destructive" />
-          <p className="text-sm text-destructive">{error}</p>
+      {notFound && (
+        <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-6 text-center text-destructive">
+          <XCircle size={32} className="mx-auto mb-2" />
+          <p className="font-semibold">Order not found</p>
+          <p className="text-sm mt-1 opacity-80">Check your reference number and try again, or contact us on WhatsApp.</p>
         </div>
       )}
 
       {order && (
         <div className="space-y-6">
-          {/* Status Badge */}
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Order Reference</p>
-                <p className="font-mono font-bold text-lg text-primary">{order.orderRef}</p>
-                <p className="text-xs text-muted-foreground mt-1">{formatDate(order.createdAt)}</p>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => printReceipt(order)}>
-                  <Printer size={14} className="mr-1" /> Print Receipt
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => printReceipt(order)}>
-                  <Download size={14} className="mr-1" /> Download PDF
-                </Button>
-              </div>
+          {/* Status badge */}
+          <div className={`flex items-center justify-between p-4 rounded-xl border ${STATUS_COLOR[order.status] || STATUS_COLOR.pending}`}>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider opacity-60 mb-0.5">Order Status</p>
+              <p className="font-bold text-lg capitalize">{order.status}</p>
             </div>
-
-            {/* Status Pills */}
-            <div className="flex items-center gap-0 overflow-x-auto pb-2">
-              {STATUS_STEPS.map((step, i) => {
-                const Icon = step.icon;
-                const isDone = i <= stepIndex && order.status !== "cancelled";
-                const isCurrent = i === stepIndex && order.status !== "cancelled";
-                return (
-                  <div key={step.key} className="flex items-center shrink-0">
-                    <div className={`flex flex-col items-center ${i <= stepIndex && order.status !== "cancelled" ? "opacity-100" : "opacity-40"}`}>
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-colors ${
-                        isCurrent ? "border-primary bg-primary text-primary-foreground" :
-                        isDone ? "border-green-500 bg-green-500 text-white" : "border-border bg-background"
-                      }`}>
-                        <Icon size={16} />
-                      </div>
-                      <p className={`text-xs mt-1 font-medium whitespace-nowrap ${isCurrent ? "text-primary" : isDone ? "text-green-600" : "text-muted-foreground"}`}>
-                        {step.label}
-                      </p>
-                    </div>
-                    {i < STATUS_STEPS.length - 1 && (
-                      <div className={`h-0.5 w-8 md:w-14 mx-1 rounded ${i < stepIndex && order.status !== "cancelled" ? "bg-green-500" : "bg-border"}`} />
-                    )}
-                  </div>
-                );
-              })}
-              {order.status === "cancelled" && (
-                <div className="flex items-center gap-2 ml-4">
-                  <XCircle size={20} className="text-destructive" />
-                  <span className="text-sm font-medium text-destructive">Cancelled</span>
-                </div>
-              )}
-            </div>
-
-            <div className={`mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border ${STATUS_COLOR[order.status] || "text-gray-600 bg-gray-50 border-gray-200"}`}>
-              Status: {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-              {" · "}Payment: {order.paymentStatus}
+            <div className="text-right">
+              <p className="text-xs opacity-60 mb-0.5">Payment</p>
+              <p className={`font-semibold capitalize ${order.payment_status === "paid" ? "text-green-600" : "text-amber-600"}`}>
+                {order.payment_status}
+              </p>
             </div>
           </div>
 
-          {/* Items */}
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <h3 className="font-semibold text-base mb-4">Order Items</h3>
-            <div className="space-y-3">
+          {/* Progress stepper */}
+          {order.status !== "cancelled" && (
+            <div className="bg-card border border-border rounded-xl p-6">
+              <div className="flex items-center justify-between relative">
+                <div className="absolute left-0 right-0 top-5 h-0.5 bg-border mx-8" />
+                <div
+                  className="absolute left-0 top-5 h-0.5 bg-primary transition-all duration-700 mx-8"
+                  style={{ right: `${(1 - stepIdx / (STATUS_STEPS.length - 1)) * 100}%` }}
+                />
+                {STATUS_STEPS.map((step, i) => {
+                  const done = i <= stepIdx;
+                  const Icon = step.icon;
+                  return (
+                    <div key={step.key} className="flex flex-col items-center gap-2 relative z-10">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${done ? "bg-primary border-primary text-white" : "bg-card border-border text-muted-foreground"}`}>
+                        <Icon size={16} />
+                      </div>
+                      <p className={`text-[10px] font-semibold text-center max-w-[56px] ${done ? "text-primary" : "text-muted-foreground"}`}>{step.label}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Order info */}
+          <div className="bg-card border border-border rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Reference</p>
+                <p className="font-mono font-bold text-primary">{order.order_ref}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground mb-0.5">Placed on</p>
+                <p className="text-sm font-medium">{formatDate(order.created_at)}</p>
+              </div>
+            </div>
+
+            <div className="mb-4 pb-4 border-b border-border">
+              <p className="text-sm font-medium mb-1">{order.customer_name}</p>
+              <p className="text-xs text-muted-foreground">{order.customer_phone} · {order.customer_email}</p>
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <Truck size={12} /> {order.shipping_address?.address}, {order.shipping_address?.city}, {order.shipping_address?.state}
+              </p>
+            </div>
+
+            <div className="space-y-2 mb-4">
               {(order.items || []).map((item: any, i: number) => (
-                <div key={i} className="flex items-center gap-3 py-2 border-b border-border last:border-0">
-                  {item.imageUrl && (
-                    <img src={item.imageUrl} alt={item.name} className="w-12 h-14 object-cover rounded-lg shrink-0" />
-                  )}
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">{item.name}</p>
-                    {item.size && <p className="text-xs text-muted-foreground">Size: {item.size}</p>}
-                    <p className="text-xs text-muted-foreground">Qty: {item.qty}</p>
+                <div key={i} className="flex items-center gap-3">
+                  {item.imageUrl && <img src={item.imageUrl} alt={item.name} className="w-10 h-12 object-cover rounded-lg shrink-0" />}
+                  <div className="flex-1 text-sm">
+                    <p className="font-medium leading-snug">{item.name}</p>
+                    <p className="text-xs text-muted-foreground">{[item.size && `Size: ${item.size}`, `Qty: ${item.qty}`].filter(Boolean).join(" · ")}</p>
                   </div>
-                  <p className="font-semibold text-primary text-sm">₦{(item.price * item.qty).toLocaleString()}</p>
+                  <p className="text-primary font-bold text-sm">₦{(item.price * item.qty).toLocaleString()}</p>
                 </div>
               ))}
             </div>
-            <div className="flex justify-between font-bold text-base pt-4 border-t border-border mt-2">
+
+            <div className="flex justify-between font-bold border-t border-border pt-3">
               <span>Total</span>
               <span className="text-primary">₦{Number(order.total).toLocaleString()}</span>
             </div>
           </div>
 
-          {/* Delivery */}
-          <div className="bg-card border border-border rounded-2xl p-6">
-            <h3 className="font-semibold text-base mb-4 flex items-center gap-2"><Truck size={18} /> Delivery Address</h3>
-            <p className="font-medium">{order.customerName}</p>
-            <p className="text-sm text-muted-foreground">{order.customerPhone}</p>
-            {order.customerEmail && <p className="text-sm text-muted-foreground">{order.customerEmail}</p>}
-            <p className="text-sm mt-2">{order.shippingAddress?.address}</p>
-            <p className="text-sm">{order.shippingAddress?.city}, {order.shippingAddress?.state}, Nigeria</p>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => printReceipt(order)} className="flex items-center gap-2 flex-1">
+              <Printer size={14} /> Print Receipt
+            </Button>
+            <Button variant="outline" onClick={() => printReceipt(order)} className="flex items-center gap-2 flex-1">
+              <Download size={14} /> Download PDF
+            </Button>
+            <a href="https://wa.me/2349063172596" target="_blank" rel="noopener noreferrer"
+              className="flex-1 flex items-center justify-center gap-2 bg-green-500 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-green-600 transition-colors">
+              💬 WhatsApp
+            </a>
           </div>
         </div>
       )}
