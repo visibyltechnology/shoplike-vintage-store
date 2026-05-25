@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
-import { CheckCircle, MessageCircle, ShoppingBag, Download, Printer, Package, Truck, Clock } from "lucide-react";
+import { CheckCircle, MessageCircle, ShoppingBag, Download, Printer, Package, Truck, Clock, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import { useCart } from "@/context/CartContext";
 
 function printReceipt(order: any) {
   const win = window.open("", "_blank", "width=640,height=900");
@@ -52,7 +53,7 @@ function printReceipt(order: any) {
       </div>
     </div>
     <table><thead><tr><th>Product</th><th>Size</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr></thead><tbody>
-      ${items.map((i) => `<tr><td>${i.name}</td><td>${i.size||"–"}</td><td>${i.qty}</td><td>₦${Number(i.price).toLocaleString()}</td><td>₦${(i.price*i.qty).toLocaleString()}</td></tr>`).join("")}
+      ${items.map((i: any) => `<tr><td>${i.name}</td><td>${i.size||"–"}</td><td>${i.qty}</td><td>₦${Number(i.price).toLocaleString()}</td><td>₦${(i.price*i.qty).toLocaleString()}</td></tr>`).join("")}
       <tr class="total-row"><td colspan="4" style="text-align:right">TOTAL</td><td>₦${Number(order.total).toLocaleString()}</td></tr>
     </tbody></table>
     <div class="footer">
@@ -69,16 +70,72 @@ export default function OrderSuccessPage() {
   const { ref } = useParams<{ ref: string }>();
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const { clearCart } = useCart();
+
+  // Parse Korapay redirect params: ?status=success&reference=...
+  const params = new URLSearchParams(window.location.search);
+  const korapayStatus = params.get("status"); // "success" | "failed" | null
+  const paymentFailed = korapayStatus === "failed";
 
   useEffect(() => {
     if (!ref) { setLoading(false); return; }
-    supabase
-      .from("orders")
-      .select("*")
-      .eq("order_ref", ref)
-      .single()
-      .then(({ data }) => { setOrder(data); setLoading(false); });
-  }, [ref]);
+
+    const run = async () => {
+      // If returning from Korapay with success, update order in Supabase and clear cart
+      if (korapayStatus === "success") {
+        try {
+          await supabase.from("orders").update({
+            payment_status: "paid",
+            status: "confirmed",
+          }).eq("order_ref", ref).eq("payment_status", "pending");
+        } catch {}
+        clearCart();
+      }
+
+      const { data } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("order_ref", ref)
+        .single();
+      setOrder(data);
+      setLoading(false);
+    };
+
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref, korapayStatus]);
+
+  if (paymentFailed) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5 ring-4 ring-red-200">
+          <XCircle size={48} className="text-red-500" />
+        </div>
+        <h1 className="text-3xl font-serif font-bold mb-2">Payment Not Completed</h1>
+        <p className="text-muted-foreground text-lg mb-6">
+          Your order was saved but payment was not completed.
+        </p>
+        {ref && (
+          <div className="bg-muted rounded-2xl p-4 mb-6 text-center border border-border">
+            <p className="text-sm text-muted-foreground mb-1">Order reference</p>
+            <p className="font-mono font-bold text-xl text-primary">{ref}</p>
+          </div>
+        )}
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Link href="/checkout">
+            <Button className="bg-[#0D6B58] text-white hover:bg-[#0a5245]">Try Again</Button>
+          </Link>
+          <a
+            href="https://wa.me/2349063172596"
+            target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 bg-green-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-600 transition-colors"
+          >
+            <MessageCircle size={18} /> Chat on WhatsApp
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-16">
@@ -138,7 +195,9 @@ export default function OrderSuccessPage() {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm leading-snug">{item.name}</p>
-                  <p className="text-xs text-muted-foreground">{[item.size && `Size: ${item.size}`, item.color && `Color: ${item.color}`, `Qty: ${item.qty}`].filter(Boolean).join(" · ")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {[item.size && `Size: ${item.size}`, item.color && `Color: ${item.color}`, `Qty: ${item.qty}`].filter(Boolean).join(" · ")}
+                  </p>
                 </div>
                 <p className="font-bold text-primary text-sm shrink-0">₦{(item.price * item.qty).toLocaleString()}</p>
               </div>
@@ -152,7 +211,9 @@ export default function OrderSuccessPage() {
 
           <div className="mt-4 pt-3 border-t border-border text-sm text-muted-foreground flex items-center gap-2">
             <Truck size={14} className="shrink-0" />
-            Delivering to: <span className="text-foreground font-medium">{order.shipping_address?.address}, {order.shipping_address?.city}, {order.shipping_address?.state}</span>
+            Delivering to: <span className="text-foreground font-medium">
+              {order.shipping_address?.address}, {order.shipping_address?.city}, {order.shipping_address?.state}
+            </span>
           </div>
         </div>
       )}
