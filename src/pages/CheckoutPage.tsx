@@ -33,19 +33,34 @@ const KORAPAY_SCRIPT_URLS = [
   "https://korablobstorage.blob.core.windows.net/modal-bucket/korapay-collections.min.js",
 ];
 
+/** Scan window for any object that has an `initialize` function — works regardless of the SDK's global name. */
+function findKorapaySDK(): any | null {
+  const w = window as any;
+  // Named candidates first
+  const candidates = ["Korapay", "KorapayModal", "KorapayInline", "KorapayCheckout", "KorapayCollections"];
+  for (const k of candidates) {
+    if (w[k] && typeof w[k].initialize === "function") return w[k];
+  }
+  // Fallback: scan all globals added after page load (indexed by __kpy_before)
+  const before: string[] = w.__kpy_before || [];
+  for (const k of Object.keys(w)) {
+    if (!before.includes(k) && w[k] && typeof w[k].initialize === "function") return w[k];
+  }
+  return null;
+}
+
 function loadKorapayScript(): Promise<void> {
   return new Promise((resolve, reject) => {
     // Already loaded — resolve immediately
-    if ((window as any).Korapay) { resolve(); return; }
+    if (findKorapaySDK()) { resolve(); return; }
 
-    // Poll for up to 5 seconds in case HTML-preloaded script is still loading
+    // Poll for up to 5 seconds in case the preloaded script from index.html is still executing
     let polls = 0;
     const poll = setInterval(() => {
       polls++;
-      if ((window as any).Korapay) { clearInterval(poll); resolve(); return; }
+      if (findKorapaySDK()) { clearInterval(poll); resolve(); return; }
       if (polls >= 50) {
         clearInterval(poll);
-        // Script not available after polling — try injecting dynamically with fallback URLs
         injectWithFallback(0, resolve, reject);
       }
     }, 100);
@@ -57,20 +72,24 @@ function injectWithFallback(idx: number, resolve: () => void, reject: (e: Error)
     reject(new Error("Could not load Korapay payment SDK. Please check your internet connection and try again."));
     return;
   }
-  // Remove any previous failed attempt
   const prev = document.getElementById("korapay-inline-script");
   if (prev) prev.remove();
 
   const s = document.createElement("script");
   s.id = "korapay-inline-script";
   s.src = KORAPAY_SCRIPT_URLS[idx];
-  s.async = true;
   s.onload = () => {
-    // Give the script 300ms to register window.Korapay
-    setTimeout(() => {
-      if ((window as any).Korapay) resolve();
-      else injectWithFallback(idx + 1, resolve, reject);
-    }, 300);
+    // Poll for up to 2s after script loads to find the SDK global
+    let p = 0;
+    const t = setInterval(() => {
+      p++;
+      const sdk = findKorapaySDK();
+      if (sdk) { clearInterval(t); resolve(); return; }
+      if (p >= 20) {
+        clearInterval(t);
+        injectWithFallback(idx + 1, resolve, reject);
+      }
+    }, 100);
   };
   s.onerror = () => injectWithFallback(idx + 1, resolve, reject);
   document.head.appendChild(s);
@@ -141,7 +160,7 @@ export default function CheckoutPage() {
       setLoading(false);
 
       // 3. Open Korapay inline checkout
-      const kp = (window as any).Korapay;
+      const kp = findKorapaySDK();
       if (!kp || typeof kp.initialize !== "function") throw new Error("Payment SDK not available");
 
       kp.initialize({
@@ -162,7 +181,7 @@ export default function CheckoutPage() {
           clearCart();
           setLocation(`/order-success/${orderRef}`);
         },
-        onFailed: async (data: any) => {
+        onFailed: async (_data: any) => {
           try {
             await supabase.from("orders").update({ payment_status: "failed" }).eq("order_ref", orderRef);
           } catch {}
