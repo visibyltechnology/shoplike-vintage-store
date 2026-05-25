@@ -35,7 +35,7 @@ function loadKorapayScript(): Promise<void> {
     if (existing) { existing.addEventListener("load", () => resolve()); return; }
     const s = document.createElement("script");
     s.id = "korapay-inline-script";
-    s.src = "https://korabay.com/inline.min.js";
+    s.src = "https://korapay.com/inline.min.js";
     s.async = true;
     s.onload = () => resolve();
     s.onerror = () => reject(new Error("Could not load payment SDK. Check your internet connection."));
