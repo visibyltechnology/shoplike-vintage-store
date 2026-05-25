@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
   import {
     LayoutDashboard, Package, ShoppingCart, Tag, Settings, LogOut,
-    Menu, X, Sun, Moon, Users, CreditCard,
+    Menu, X, Sun, Moon, Users, CreditCard, MessageSquare,
   } from "lucide-react";
   import { clearAdminToken } from "@/lib/api";
   import { supabase } from "@/lib/supabase";
@@ -16,6 +16,7 @@ import { Link, useLocation } from "wouter";
     { href: "/admin/categories", label: "Categories", icon: Tag },
     { href: "/admin/users", label: "Customers", icon: Users },
     { href: "/admin/payments", label: "Payments", icon: CreditCard },
+    { href: "/admin/bulk-sms", label: "Bulk SMS", icon: MessageSquare },
     { href: "/admin/settings", label: "Settings", icon: Settings },
   ];
 

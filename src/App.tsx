@@ -32,6 +32,7 @@ import AdminCategories from "@/pages/admin/Categories";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminUsers from "@/pages/admin/Users";
 import AdminPayments from "@/pages/admin/Payments";
+import BulkSms from "@/pages/admin/BulkSms";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 
 setAuthTokenGetter(() => getAdminToken());
@@ -71,6 +72,7 @@ function Router() {
       <Route path="/admin/categories"><AdminGuard><AdminLayout><AdminCategories /></AdminLayout></AdminGuard></Route>
       <Route path="/admin/users"><AdminGuard><AdminLayout><AdminUsers /></AdminLayout></AdminGuard></Route>
       <Route path="/admin/payments"><AdminGuard><AdminLayout><AdminPayments /></AdminLayout></AdminGuard></Route>
+      <Route path="/admin/bulk-sms"><AdminGuard><AdminLayout><BulkSms /></AdminLayout></AdminGuard></Route>
       <Route path="/admin/settings"><AdminGuard><AdminLayout><AdminSettings /></AdminLayout></AdminGuard></Route>
       <Route component={NotFound} />
     </Switch>
