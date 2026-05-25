@@ -14,14 +14,18 @@ const NIGERIA_STATES = [
   "Yobe","Zamfara",
 ];
 
-const KORAPAY_PUBLIC_KEY = "pk_test_PRPabwReqFtVxH472nitLVfuUbFskvZQBxsmAaiA";
+// Keys — swap for live keys when going live
+const KORAPAY_SECRET_KEY = "sk_test_sDfBgkNvnUiYPsGQCkUGYEU8pNaMLxM28DhVo8ag";
 
-function getPublicKey(): string {
+function getSecretKey(): string {
   try {
     const s = localStorage.getItem("sv_store_settings");
-    if (s) { const p = JSON.parse(s); if (p.korapayPublicKey) return p.korapayPublicKey; }
+    if (s) {
+      const p = JSON.parse(s);
+      if (p.korapaySecretKey) return p.korapaySecretKey;
+    }
   } catch {}
-  return KORAPAY_PUBLIC_KEY;
+  return KORAPAY_SECRET_KEY;
 }
 
 function generateRef(): string {
@@ -29,54 +33,54 @@ function generateRef(): string {
 }
 
 /**
- * Initializes a Korapay payment by calling their hosted checkout endpoint directly.
- * Returns the URL to redirect the customer to — no SDK required.
+ * Creates a Korapay charge via their standard API and returns the hosted checkout URL.
+ * Uses the secret key — CORS is open (*) on api.korapay.com so this works from the browser.
+ * Amount is in NAIRA (not kobo) for the standard charges API.
  */
-async function initKorapayCheckout(opts: {
-  key: string;
+async function createKorapayCharge(opts: {
+  secretKey: string;
   reference: string;
-  amount: number;
-  currency: string;
-  customer: { name: string; email: string; phone: string };
+  amountNaira: number;
+  customer: { name: string; email: string };
+  narration: string;
   redirectUrl: string;
-  notificationUrl?: string;
 }): Promise<string> {
-  const isTest = opts.key.startsWith("pk_test_");
-  const baseUrl = isTest
-    ? "https://test-checkout.korapay.com"
-    : "https://checkout.korapay.com";
+  const isTest = opts.secretKey.startsWith("sk_test_");
+  const apiBase = isTest
+    ? "https://api.korapay.com"
+    : "https://api.korapay.com";
 
-  const res = await fetch(baseUrl, {
+  const res = await fetch(`${apiBase}/merchant/api/v1/charges/initialize`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${opts.key}`,
+      Authorization: `Bearer ${opts.secretKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      key: opts.key,
       reference: opts.reference,
-      amount: opts.amount,
-      currency: opts.currency,
-      customer: opts.customer,
+      amount: opts.amountNaira,           // Standard API uses Naira
+      currency: "NGN",
+      narration: opts.narration,
       redirect_url: opts.redirectUrl,
-      notification_url: opts.notificationUrl,
+      customer: {
+        name: opts.customer.name,
+        email: opts.customer.email,
+      },
     }),
   });
 
   if (!res.ok) {
-    throw new Error(`Payment service error (${res.status}). Please try again.`);
+    const text = await res.text().catch(() => "");
+    throw new Error(`Payment service error (${res.status}). ${text.slice(0, 100)}`);
   }
 
   const json = await res.json();
-  const inner = json?.data?.data ?? json?.data ?? json;
 
-  if (!inner?.unique_reference) {
-    throw new Error(
-      inner?.message || json?.data?.message || "Could not initialize payment. Please try again."
-    );
+  if (!json.status || !json.data?.checkout_url) {
+    throw new Error(json.message || "Could not initialize payment. Please try again.");
   }
 
-  return `${baseUrl}/${inner.unique_reference}/pay`;
+  return json.data.checkout_url;
 }
 
 export default function CheckoutPage() {
@@ -120,39 +124,44 @@ export default function CheckoutPage() {
     const orderRef = generateRef();
 
     try {
-      // 1. Save order to Supabase before redirecting
+      // 1. Save order to Supabase before redirecting to payment
       const { error: orderErr } = await supabase.from("orders").insert({
         order_ref: orderRef,
         customer_name: form.fullName,
         customer_email: form.email,
         customer_phone: form.phone,
         shipping_address: {
-          address: form.address, city: form.city,
-          state: form.state, country: "Nigeria",
+          address: form.address,
+          city: form.city,
+          state: form.state,
+          country: "Nigeria",
         },
         items: items.map(i => ({
-          productId: i.productId, name: i.name, price: i.price,
-          qty: i.qty, size: i.size || null, color: i.color || null,
+          productId: i.productId,
+          name: i.name,
+          price: i.price,
+          qty: i.qty,
+          size: i.size || null,
+          color: i.color || null,
           imageUrl: i.imageUrl || null,
         })),
         total,
         status: "pending",
         payment_status: "pending",
       });
-      if (orderErr) throw new Error("Could not save order: " + orderErr.message);
+      if (orderErr) throw new Error("Could not save your order: " + orderErr.message);
 
-      // 2. Initialize Korapay payment — direct API call, no SDK
-      const checkoutUrl = await initKorapayCheckout({
-        key: getPublicKey(),
+      // 2. Create Korapay charge and get hosted checkout URL
+      const checkoutUrl = await createKorapayCharge({
+        secretKey: getSecretKey(),
         reference: orderRef,
-        amount: Math.round(total * 100), // amount in kobo
-        currency: "NGN",
-        customer: { name: form.fullName, email: form.email, phone: form.phone },
+        amountNaira: Math.round(total),    // Standard API wants Naira
+        customer: { name: form.fullName, email: form.email },
+        narration: `Shoplike Vintage Order ${orderRef}`,
         redirectUrl: `${window.location.origin}/order-success/${orderRef}`,
-        notificationUrl: `https://shoplike-vintage-store.vercel.app/api/korapay-webhook`,
       });
 
-      // 3. Redirect to Korapay hosted checkout page
+      // 3. Redirect customer to Korapay-hosted payment page
       window.location.href = checkoutUrl;
     } catch (err: any) {
       setLoading(false);
@@ -186,39 +195,63 @@ export default function CheckoutPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="text-sm font-medium mb-1.5 block">Full Name *</label>
-                <input value={form.fullName} onChange={e => setForm({...form, fullName: e.target.value})}
-                  className={inputCls("fullName")} placeholder="As on your ID" />
+                <input
+                  value={form.fullName}
+                  onChange={e => setForm({...form, fullName: e.target.value})}
+                  className={inputCls("fullName")}
+                  placeholder="As on your ID"
+                />
                 {errors.fullName && <p className="text-xs text-destructive mt-1">{errors.fullName}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Phone Number *</label>
-                <input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})}
-                  placeholder="08012345678" className={inputCls("phone")} />
+                <input
+                  value={form.phone}
+                  onChange={e => setForm({...form, phone: e.target.value})}
+                  placeholder="08012345678"
+                  className={inputCls("phone")}
+                />
                 {errors.phone && <p className="text-xs text-destructive mt-1">{errors.phone}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Email Address *</label>
-                <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})}
-                  placeholder="you@example.com" className={inputCls("email")} />
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm({...form, email: e.target.value})}
+                  placeholder="you@example.com"
+                  className={inputCls("email")}
+                />
                 {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
               </div>
               <div className="col-span-2">
                 <label className="text-sm font-medium mb-1.5 block">Delivery Address *</label>
-                <textarea value={form.address} onChange={e => setForm({...form, address: e.target.value})}
-                  rows={2} placeholder="House number, street name, landmark..."
-                  className={inputCls("address") + " resize-none"} />
+                <textarea
+                  value={form.address}
+                  onChange={e => setForm({...form, address: e.target.value})}
+                  rows={2}
+                  placeholder="House number, street name, landmark..."
+                  className={inputCls("address") + " resize-none"}
+                />
                 {errors.address && <p className="text-xs text-destructive mt-1">{errors.address}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium mb-1.5 block">City *</label>
-                <input value={form.city} onChange={e => setForm({...form, city: e.target.value})}
-                  className={inputCls("city")} placeholder="e.g. Kano" />
+                <input
+                  value={form.city}
+                  onChange={e => setForm({...form, city: e.target.value})}
+                  className={inputCls("city")}
+                  placeholder="e.g. Kano"
+                />
                 {errors.city && <p className="text-xs text-destructive mt-1">{errors.city}</p>}
               </div>
               <div>
                 <label className="text-sm font-medium mb-1.5 block">State *</label>
-                <select value={form.state} onChange={e => setForm({...form, state: e.target.value})}
-                  className={inputCls()}>
+                <select
+                  value={form.state}
+                  onChange={e => setForm({...form, state: e.target.value})}
+                  className={inputCls()}
+                >
                   {NIGERIA_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
@@ -238,8 +271,12 @@ export default function CheckoutPage() {
                   Card · Bank Transfer · USSD · Wallet — all payment methods accepted
                 </p>
               </div>
-              <img src="/korapay-logo.svg" alt="Korapay" className="h-6 w-auto shrink-0"
-                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+              <img
+                src="/korapay-logo.svg"
+                alt="Korapay"
+                className="h-6 w-auto shrink-0"
+                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-xl px-4 py-3">
               <ShieldCheck size={14} className="text-green-500 shrink-0" />
@@ -247,13 +284,21 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          <Button type="submit" disabled={loading}
+          <Button
+            type="submit"
+            disabled={loading}
             className="w-full bg-[#0D6B58] hover:bg-[#0a5245] text-white text-base font-bold py-6 rounded-2xl flex items-center justify-center gap-2"
-            data-testid="button-place-order">
+            data-testid="button-place-order"
+          >
             {loading ? (
-              <><span className="animate-spin inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> Redirecting to Korapay…</>
+              <>
+                <span className="animate-spin inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+                Redirecting to Korapay…
+              </>
             ) : (
-              <><Lock size={16} /> Pay ₦{total.toLocaleString()} with Korapay</>
+              <>
+                <Lock size={16} /> Pay ₦{total.toLocaleString()} with Korapay
+              </>
             )}
           </Button>
           <p className="text-center text-xs text-muted-foreground -mt-2">
@@ -268,7 +313,9 @@ export default function CheckoutPage() {
             {items.map(item => (
               <div key={`${item.productId}-${item.size}-${item.color}`} className="flex gap-3">
                 <div className="w-12 h-14 rounded-lg bg-muted overflow-hidden shrink-0">
-                  {item.imageUrl && <img src={item.imageUrl} className="w-full h-full object-cover" alt="" />}
+                  {item.imageUrl && (
+                    <img src={item.imageUrl} className="w-full h-full object-cover" alt="" />
+                  )}
                 </div>
                 <div className="flex-1 text-sm min-w-0">
                   <p className="font-medium line-clamp-2 leading-snug">{item.name}</p>
@@ -283,7 +330,7 @@ export default function CheckoutPage() {
           </div>
           <div className="border-t border-border pt-3 space-y-1.5">
             <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Subtotal ({items.reduce((s,i)=>s+i.qty,0)} items)</span>
+              <span>Subtotal ({items.reduce((s, i) => s + i.qty, 0)} items)</span>
               <span>₦{total.toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-sm text-muted-foreground">
@@ -292,7 +339,9 @@ export default function CheckoutPage() {
             </div>
             <div className="flex justify-between font-bold text-base pt-2 border-t border-border">
               <span>Total</span>
-              <span className="text-primary" data-testid="text-checkout-total">₦{total.toLocaleString()}</span>
+              <span className="text-primary" data-testid="text-checkout-total">
+                ₦{total.toLocaleString()}
+              </span>
             </div>
           </div>
           <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground border-t border-border pt-3">
