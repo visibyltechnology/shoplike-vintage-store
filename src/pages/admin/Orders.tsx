@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useGetOrders, useUpdateOrderStatus, getGetOrdersQueryKey } from "@/lib/api-client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 import { Eye, X, MapPin, Phone, Mail, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,30 +15,70 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400",
 };
 
+const PAGE_SIZE = 20;
+
+async function fetchOrders(status: string, page: number) {
+  let q = supabase
+    .from("orders")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false });
+
+  if (status) q = q.eq("status", status);
+
+  const from = (page - 1) * PAGE_SIZE;
+  q = q.range(from, from + PAGE_SIZE - 1);
+
+  const { data, error, count } = await q;
+  if (error) throw error;
+  return { orders: data || [], total: count || 0 };
+}
+
+async function updateOrderStatus(id: number, status: string) {
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ status })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 export default function AdminOrders() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
-  const { data, isLoading } = useGetOrders({ status: statusFilter || undefined, page, limit: 20 });
-  const updateStatus = useUpdateOrderStatus();
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const handleStatusChange = (orderId: number, status: string) => {
-    updateStatus.mutate({ id: orderId, data: { status } }, {
-      onSuccess: (updated) => {
-        qc.invalidateQueries({ queryKey: getGetOrdersQueryKey() });
-        if (selectedOrder?.id === orderId) setSelectedOrder(updated);
-        toast({ title: `Order status updated to ${status}` });
-      },
-    });
-  };
+  const { data, isLoading } = useQuery({
+    queryKey: ["sb-orders", statusFilter, page],
+    queryFn: () => fetchOrders(statusFilter, page),
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      updateOrderStatus(id, status),
+    onSuccess: (updated, variables) => {
+      qc.invalidateQueries({ queryKey: ["sb-orders"] });
+      if (selectedOrder?.id === variables.id) {
+        setSelectedOrder((prev: any) => ({ ...prev, status: variables.status }));
+      }
+      toast({ title: `Order status updated to ${variables.status}` });
+    },
+    onError: (e: any) =>
+      toast({ title: "Failed to update status", description: e.message, variant: "destructive" }),
+  });
+
+  const orders = data?.orders ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-serif font-bold">Orders</h1>
-        <p className="text-muted-foreground text-sm">{data?.total || 0} total orders</p>
+        <p className="text-muted-foreground text-sm">{total} total order{total !== 1 ? "s" : ""}</p>
       </div>
 
       {/* Status Filter */}
@@ -47,8 +87,11 @@ export default function AdminOrders() {
           <button
             key={s}
             onClick={() => { setStatusFilter(s); setPage(1); }}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${statusFilter === s ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
-            data-testid={`button-filter-status-${s || "all"}`}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              statusFilter === s
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted hover:bg-muted/80"
+            }`}
           >
             {s === "" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
           </button>
@@ -73,39 +116,58 @@ export default function AdminOrders() {
             <tbody className="divide-y divide-border">
               {isLoading
                 ? Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i}><td colSpan={7}><Skeleton className="h-12 w-full" /></td></tr>
+                  <tr key={i}>
+                    <td colSpan={7} className="px-4 py-3">
+                      <Skeleton className="h-8 w-full" />
+                    </td>
+                  </tr>
                 ))
-                : data?.orders?.map((o) => (
-                  <tr key={o.id} className="hover:bg-muted/30 transition-colors" data-testid={`row-order-${o.id}`}>
-                    <td className="px-4 py-3 font-mono text-xs font-medium">{o.orderRef}</td>
+                : orders.length === 0
+                ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                      <p className="font-medium">No orders found</p>
+                      <p className="text-sm mt-1">Orders will appear here once customers place them.</p>
+                    </td>
+                  </tr>
+                )
+                : orders.map((o: any) => (
+                  <tr key={o.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs font-medium">{o.order_ref}</td>
                     <td className="px-4 py-3">
-                      <p className="font-medium">{o.shippingAddress?.fullName}</p>
-                      <p className="text-xs text-muted-foreground">{o.shippingAddress?.phone}</p>
+                      <p className="font-medium">{o.customer_name}</p>
+                      <p className="text-xs text-muted-foreground">{o.customer_phone}</p>
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell text-muted-foreground text-xs">
-                      {new Date(o.createdAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
+                      {new Date(o.created_at).toLocaleDateString("en-NG", {
+                        day: "numeric", month: "short", year: "numeric",
+                      })}
                     </td>
                     <td className="px-4 py-3 font-bold text-primary">₦{Number(o.total).toLocaleString()}</td>
                     <td className="px-4 py-3">
                       <select
                         value={o.status}
-                        onChange={(e) => handleStatusChange(o.id, e.target.value)}
+                        onChange={(e) => updateStatus.mutate({ id: o.id, status: e.target.value })}
                         className={`text-xs px-2 py-1 rounded-full font-medium border-0 cursor-pointer ${STATUS_COLORS[o.status] || ""}`}
-                        data-testid={`select-order-status-${o.id}`}
                       >
-                        {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                        {STATUSES.map((s) => (
+                          <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                        ))}
                       </select>
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${o.paymentStatus === "paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                        {o.paymentStatus}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        o.payment_status === "paid"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-yellow-100 text-yellow-700"
+                      }`}>
+                        {o.payment_status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => setSelectedOrder(o)}
                         className="p-1.5 rounded hover:bg-muted"
-                        data-testid={`button-view-order-${o.id}`}
                         title="View details"
                       >
                         <Eye size={15} />
@@ -117,11 +179,16 @@ export default function AdminOrders() {
             </tbody>
           </table>
         </div>
-        {data && data.total > 20 && (
+
+        {totalPages > 1 && (
           <div className="flex justify-center gap-2 p-4 border-t border-border">
-            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
-            <span className="flex items-center text-sm px-2">Page {page} of {Math.ceil(data.total / 20)}</span>
-            <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(data.total / 20)}>Next</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+              Previous
+            </Button>
+            <span className="flex items-center text-sm px-2">Page {page} of {totalPages}</span>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}>
+              Next
+            </Button>
           </div>
         )}
       </div>
@@ -132,12 +199,14 @@ export default function AdminOrders() {
           <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-border">
               <h2 className="font-semibold">Order Details</h2>
-              <button onClick={() => setSelectedOrder(null)} className="p-2 rounded hover:bg-muted" data-testid="button-close-order-modal"><X size={18} /></button>
+              <button onClick={() => setSelectedOrder(null)} className="p-2 rounded hover:bg-muted">
+                <X size={18} />
+              </button>
             </div>
             <div className="p-5 space-y-5">
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Reference</p>
-                <p className="font-mono font-bold text-lg" data-testid="text-order-ref-detail">{selectedOrder.orderRef}</p>
+                <p className="font-mono font-bold text-lg">{selectedOrder.order_ref}</p>
               </div>
 
               {/* Customer Info */}
@@ -145,30 +214,32 @@ export default function AdminOrders() {
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Customer Details</p>
                 <div className="flex items-center gap-2 text-sm">
                   <Package size={14} className="text-primary" />
-                  <span className="font-medium">{selectedOrder.shippingAddress?.fullName}</span>
+                  <span className="font-medium">{selectedOrder.customer_name}</span>
                 </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <Phone size={14} className="text-primary" />
-                  <span>{selectedOrder.shippingAddress?.phone}</span>
-                </div>
-                {selectedOrder.shippingAddress?.email && (
+                {selectedOrder.customer_phone && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone size={14} className="text-primary" />
+                    <span>{selectedOrder.customer_phone}</span>
+                  </div>
+                )}
+                {selectedOrder.customer_email && (
                   <div className="flex items-center gap-2 text-sm">
                     <Mail size={14} className="text-primary" />
-                    <span>{selectedOrder.shippingAddress.email}</span>
+                    <span>{selectedOrder.customer_email}</span>
                   </div>
                 )}
               </div>
 
               {/* Shipping Address */}
-              {selectedOrder.shippingAddress && (
+              {selectedOrder.shipping_address && (
                 <div className="bg-muted/50 rounded-xl p-4 space-y-1">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Delivery Address</p>
                   <div className="flex items-start gap-2 text-sm">
                     <MapPin size={14} className="text-primary shrink-0 mt-0.5" />
                     <div>
-                      <p>{selectedOrder.shippingAddress.address}</p>
-                      <p>{selectedOrder.shippingAddress.city}, {selectedOrder.shippingAddress.state}</p>
-                      <p>{selectedOrder.shippingAddress.country}</p>
+                      <p>{selectedOrder.shipping_address.address}</p>
+                      <p>{selectedOrder.shipping_address.city}, {selectedOrder.shipping_address.state}</p>
+                      <p>{selectedOrder.shipping_address.country}</p>
                     </div>
                   </div>
                 </div>
@@ -181,7 +252,10 @@ export default function AdminOrders() {
                   {(selectedOrder.items || []).map((item: any, i: number) => (
                     <div key={i} className="flex items-center gap-3 bg-muted/50 rounded-lg p-3">
                       <div className="w-12 h-14 rounded bg-muted overflow-hidden shrink-0">
-                        {item.imageUrl ? <img src={item.imageUrl} className="w-full h-full object-cover" alt="" /> : <div className="w-full h-full" />}
+                        {item.imageUrl
+                          ? <img src={item.imageUrl} className="w-full h-full object-cover" alt="" />
+                          : <div className="w-full h-full" />
+                        }
                       </div>
                       <div className="flex-1 text-sm">
                         <p className="font-medium">{item.name}</p>
@@ -201,17 +275,18 @@ export default function AdminOrders() {
               <div className="flex items-center justify-between py-3 border-t border-border">
                 <div>
                   <p className="text-xs text-muted-foreground">Order Total</p>
-                  <p className="text-2xl font-bold text-primary" data-testid="text-order-total-detail">₦{Number(selectedOrder.total).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-primary">₦{Number(selectedOrder.total).toLocaleString()}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground mb-1">Status</p>
                   <select
                     value={selectedOrder.status}
-                    onChange={(e) => handleStatusChange(selectedOrder.id, e.target.value)}
+                    onChange={(e) => updateStatus.mutate({ id: selectedOrder.id, status: e.target.value })}
                     className={`text-sm px-3 py-1.5 rounded-lg font-medium border border-border cursor-pointer ${STATUS_COLORS[selectedOrder.status] || ""}`}
-                    data-testid="select-order-status-modal"
                   >
-                    {STATUSES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                    {STATUSES.map((s) => (
+                      <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                    ))}
                   </select>
                 </div>
               </div>

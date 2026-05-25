@@ -8,6 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 
 const SECTIONS = ["male", "female", "children"];
 const PAGE_SIZE = 12;
+const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png"];
+const ALLOWED_EXTS = [".jpg", ".jpeg", ".png"];
 
 interface ProductForm {
   name: string; description: string; price: string; compare_price: string;
@@ -104,18 +106,37 @@ export default function AdminProducts() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toast({ title: "Invalid file type", description: "Only JPG and PNG images are allowed.", variant: "destructive" });
+      if (imageInputRef.current) imageInputRef.current.value = "";
+      return;
+    }
+
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!ext || !ALLOWED_EXTS.includes(`.${ext}`)) {
+      toast({ title: "Invalid file type", description: "Only .jpg, .jpeg, and .png files are allowed.", variant: "destructive" });
+      if (imageInputRef.current) imageInputRef.current.value = "";
+      return;
+    }
+
     setUploadingImage(true);
     try {
-      const ext = file.name.split(".").pop();
-      const filename = `${Date.now()}.${ext}`;
-      const { data, error } = await supabase.storage.from("product-images").upload(filename, file, { upsert: true });
+      const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { data, error } = await supabase.storage.from("product-images").upload(filename, file, {
+        upsert: true,
+        contentType: file.type,
+      });
       if (error) throw error;
       const { data: { publicUrl } } = supabase.storage.from("product-images").getPublicUrl(data.path);
       setForm(f => ({ ...f, images: [...f.images, publicUrl] }));
-      toast({ title: "Image uploaded" });
+      toast({ title: "Image uploaded successfully" });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
-    } finally { setUploadingImage(false); if (imageInputRef.current) imageInputRef.current.value = ""; }
+      toast({ title: "Upload failed", description: err.message || "Please try again.", variant: "destructive" });
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
   };
 
   const buildPayload = () => ({
@@ -313,9 +334,10 @@ export default function AdminProducts() {
                 </div>
               </div>
 
-              {/* Images — upload only, no URL input */}
+              {/* Product Images — upload only, JPG/PNG only */}
               <div>
                 <label className="text-sm font-medium mb-2 block">Product Images</label>
+                <p className="text-xs text-muted-foreground mb-2">Accepted formats: JPG, JPEG, PNG</p>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {form.images.map((url, i) => (
                     <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border group">
@@ -330,9 +352,22 @@ export default function AdminProducts() {
                   ))}
                 </div>
                 <div>
-                  <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                  <Button type="button" variant="outline" size="sm" onClick={() => imageInputRef.current?.click()} disabled={uploadingImage} className="flex items-center gap-2">
-                    <Upload size={14} /> {uploadingImage ? "Uploading…" : "Upload Image"}
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={uploadingImage}
+                    className="flex items-center gap-2"
+                  >
+                    <Upload size={14} /> {uploadingImage ? "Uploading…" : "Upload Image (JPG/PNG)"}
                   </Button>
                 </div>
               </div>
