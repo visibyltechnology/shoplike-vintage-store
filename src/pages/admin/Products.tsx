@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { Plus, Pencil, Trash2, Upload, X, Image } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload, X, Image, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -41,8 +41,10 @@ export default function AdminProducts() {
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -101,6 +103,35 @@ export default function AdminProducts() {
     });
     setEditId(p.id);
     setShowForm(true);
+  };
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== "video/mp4") {
+      toast({ title: "Invalid file type", description: "Only MP4 videos are allowed.", variant: "destructive" });
+      if (videoInputRef.current) videoInputRef.current.value = "";
+      return;
+    }
+
+    setUploadingVideo(true);
+    try {
+      const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`;
+      const { data, error } = await supabase.storage.from("product-videos").upload(filename, file, {
+        upsert: true,
+        contentType: "video/mp4",
+      });
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from("product-videos").getPublicUrl(data.path);
+      setForm(f => ({ ...f, video_url: publicUrl }));
+      toast({ title: "Video uploaded successfully" });
+    } catch (err: any) {
+      toast({ title: "Video upload failed", description: err.message || "Please try again.", variant: "destructive" });
+    } finally {
+      setUploadingVideo(false);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -372,9 +403,44 @@ export default function AdminProducts() {
                 </div>
               </div>
 
+              {/* Product Video — upload only, MP4 only */}
               <div>
-                <label className="text-sm font-medium mb-1 block">Video URL (optional)</label>
-                <input value={form.video_url} onChange={e => setForm(f => ({ ...f, video_url: e.target.value }))} className={inputCls} placeholder="https://..." />
+                <label className="text-sm font-medium mb-2 block">Product Video (optional)</label>
+                <p className="text-xs text-muted-foreground mb-2">Accepted format: MP4 only · Max 50MB</p>
+                {form.video_url && (
+                  <div className="mb-3 relative">
+                    <video
+                      src={form.video_url}
+                      controls
+                      className="w-full max-h-40 rounded-lg border border-border bg-black"
+                    />
+                    <button
+                      onClick={() => setForm(f => ({ ...f, video_url: "" }))}
+                      className="absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+                <div>
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept=".mp4,video/mp4"
+                    className="hidden"
+                    onChange={handleVideoUpload}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => videoInputRef.current?.click()}
+                    disabled={uploadingVideo}
+                    className="flex items-center gap-2"
+                  >
+                    <Video size={14} /> {uploadingVideo ? "Uploading…" : form.video_url ? "Replace Video" : "Upload MP4 Video"}
+                  </Button>
+                </div>
               </div>
             </div>
             <div className="p-6 border-t border-border flex gap-3 justify-end">
