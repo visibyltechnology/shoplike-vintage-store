@@ -20,8 +20,37 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <!-- Snapshot window keys before SDK loads -->
+    <script>window.__kpy_before=Object.keys(window);</script>
     <!-- Korapay inline checkout SDK — self-hosted for reliability -->
     <script src="/korapay-collections.min.js"></script>
+    <!-- Detect whatever global the SDK registered and alias to window.Korapay -->
+    <script>
+      (function() {
+        if (window.Korapay && typeof window.Korapay.initialize === 'function') return;
+        var after = Object.keys(window);
+        for (var i = 0; i < after.length; i++) {
+          var k = after[i];
+          if (window.__kpy_before.indexOf(k) === -1) {
+            var g = window[k];
+            if (g && typeof g.initialize === 'function') {
+              window.Korapay = g;
+              break;
+            }
+          }
+        }
+        if (!window.Korapay) {
+          var candidates = ['KorapayModal','KorapayInline','KorapayCheckout','KorapayCollections'];
+          for (var j = 0; j < candidates.length; j++) {
+            var cand = window[candidates[j]];
+            if (cand && typeof cand.initialize === 'function') {
+              window.Korapay = cand;
+              break;
+            }
+          }
+        }
+      })();
+    </script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
