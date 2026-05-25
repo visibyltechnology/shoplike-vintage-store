@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { Plus, Pencil, Trash2, Upload, X, Image, Link2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Upload, X, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -39,7 +39,6 @@ export default function AdminProducts() {
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [imageUrlInput, setImageUrlInput] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();
@@ -115,15 +114,8 @@ export default function AdminProducts() {
       setForm(f => ({ ...f, images: [...f.images, publicUrl] }));
       toast({ title: "Image uploaded" });
     } catch (err: any) {
-      toast({ title: "Upload failed", description: "Paste an image URL below instead", variant: "destructive" });
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally { setUploadingImage(false); if (imageInputRef.current) imageInputRef.current.value = ""; }
-  };
-
-  const addImageUrl = () => {
-    const url = imageUrlInput.trim();
-    if (!url) return;
-    setForm(f => ({ ...f, images: [...f.images, url] }));
-    setImageUrlInput("");
   };
 
   const buildPayload = () => ({
@@ -321,7 +313,7 @@ export default function AdminProducts() {
                 </div>
               </div>
 
-              {/* Images */}
+              {/* Images — upload only, no URL input */}
               <div>
                 <label className="text-sm font-medium mb-2 block">Product Images</label>
                 <div className="flex flex-wrap gap-2 mb-3">
@@ -336,18 +328,6 @@ export default function AdminProducts() {
                       </button>
                     </div>
                   ))}
-                </div>
-                <div className="flex gap-2 mb-2">
-                  <input
-                    value={imageUrlInput}
-                    onChange={e => setImageUrlInput(e.target.value)}
-                    placeholder="Paste image URL and click Add"
-                    className={inputCls + " flex-1"}
-                    onKeyDown={e => e.key === "Enter" && (e.preventDefault(), addImageUrl())}
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={addImageUrl} className="shrink-0 flex items-center gap-1">
-                    <Link2 size={14} /> Add URL
-                  </Button>
                 </div>
                 <div>
                   <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />

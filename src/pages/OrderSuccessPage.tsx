@@ -12,12 +12,15 @@ function printReceipt(order: any) {
   const date = new Date(order.created_at).toLocaleDateString("en-NG", {
     day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
+  const logoUrl = `${window.location.origin}/logo.jpg`;
   win.document.write(`<!DOCTYPE html><html><head>
     <title>Receipt - ${order.order_ref}</title><meta charset="utf-8"/>
     <style>
       *{box-sizing:border-box;margin:0;padding:0}
       body{font-family:Arial,sans-serif;padding:40px;color:#111;background:#fff}
-      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #be185d;padding-bottom:16px}
+      .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;border-bottom:3px solid #be185d;padding-bottom:16px}
+      .logo-wrap{display:flex;align-items:center;gap:14px}
+      .logo-img{width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid #be185d}
       .store-name{font-size:22px;font-weight:900;color:#be185d;letter-spacing:2px}
       .store-tag{font-size:11px;color:#888;margin-top:4px}
       .ref{font-family:monospace;font-size:16px;font-weight:bold;color:#be185d}
@@ -34,7 +37,13 @@ function printReceipt(order: any) {
       @media print{body{padding:20px}@page{margin:1cm}}
     </style></head><body>
     <div class="header">
-      <div><div class="store-name">SHOPLIKE VINTAGE</div><div class="store-tag">Premium Vintage Fashion · Est. MMXX</div></div>
+      <div class="logo-wrap">
+        <img src="${logoUrl}" alt="Shoplike Vintage" class="logo-img" onerror="this.style.display='none'" />
+        <div>
+          <div class="store-name">SHOPLIKE VINTAGE</div>
+          <div class="store-tag">Premium Vintage Fashion · Est. MMXX</div>
+        </div>
+      </div>
       <div style="text-align:right">OFFICIAL RECEIPT<br/><span class="ref">${order.order_ref}</span><br/><small style="color:#888;font-size:11px">${date}</small></div>
     </div>
     <div class="info-grid">

@@ -4,6 +4,7 @@ import { Link, useLocation } from "wouter";
     Menu, X, Sun, Moon, Users, CreditCard,
   } from "lucide-react";
   import { clearAdminToken } from "@/lib/api";
+  import { supabase } from "@/lib/supabase";
   import { useTheme } from "@/components/theme-provider";
   import { useState } from "react";
   const logoPath = "/logo.jpg";
@@ -22,7 +23,7 @@ import { Link, useLocation } from "wouter";
     const [location, setLocation] = useLocation();
     const { theme, setTheme } = useTheme();
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const handleLogout = () => { clearAdminToken(); setLocation("/admin"); };
+    const handleLogout = () => { clearAdminToken(); supabase.auth.signOut(); setLocation("/admin"); };
 
     return (
       <div className="flex h-screen bg-background overflow-hidden">

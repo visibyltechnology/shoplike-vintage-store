@@ -7,8 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 
 const SECTIONS = ["male", "female", "children"];
 
-interface CatForm { name: string; section: string; slug: string; imageUrl: string; }
-const emptyForm: CatForm = { name: "", section: "male", slug: "", imageUrl: "" };
+interface CatForm { name: string; section: string; slug: string; }
+const emptyForm: CatForm = { name: "", section: "male", slug: "" };
 
 async function fetchCategories() {
   const { data, error } = await supabase
@@ -64,7 +64,7 @@ export default function AdminCategories() {
 
   const openCreate = () => { setForm(emptyForm); setEditId(null); setShowForm(true); };
   const openEdit = (c: any) => {
-    setForm({ name: c.name, section: c.section, slug: c.slug, imageUrl: c.image_url || "" });
+    setForm({ name: c.name, section: c.section, slug: c.slug });
     setEditId(c.id);
     setShowForm(true);
   };
@@ -72,7 +72,7 @@ export default function AdminCategories() {
   const autoSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
   const handleSave = () => {
-    const payload = { name: form.name, section: form.section, slug: form.slug, image_url: form.imageUrl || null };
+    const payload = { name: form.name, section: form.section, slug: form.slug };
     if (editId) {
       updateMutation.mutate({ id: editId, payload });
     } else {
@@ -153,12 +153,6 @@ export default function AdminCategories() {
                 <label className="text-sm font-medium mb-1 block">Slug *</label>
                 <input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} required
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" data-testid="input-category-slug" />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block">Image URL (optional)</label>
-                <input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-border">

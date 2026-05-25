@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { setAdminToken } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react";
 
@@ -19,30 +20,33 @@ export default function AdminLogin() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    setTimeout(() => {
-      if (
-        email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
-        password === ADMIN_PASSWORD
-      ) {
-        setAdminToken(generateToken(email));
-        setLocation("/admin/dashboard");
-      } else {
-        setError("Invalid email or password. Please try again.");
-      }
-      setLoading(false);
-    }, 400);
+
+    if (
+      email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
+      password === ADMIN_PASSWORD
+    ) {
+      // Sign into Supabase so RLS-protected writes are allowed
+      await supabase.auth.signInWithPassword({
+        email: ADMIN_EMAIL,
+        password: ADMIN_PASSWORD,
+      });
+      setAdminToken(generateToken(email));
+      setLocation("/admin/dashboard");
+    } else {
+      setError("Invalid email or password. Please try again.");
+    }
+
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        {/* Card */}
         <div className="bg-card border border-border rounded-2xl shadow-xl p-8">
-          {/* Header */}
           <div className="text-center mb-8">
             <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-[#c9a96e] shadow-lg mx-auto mb-4">
               <img src="/logo.jpg" alt="Shoplike Vintage" className="w-full h-full object-cover" />
