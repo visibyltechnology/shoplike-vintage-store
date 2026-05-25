@@ -28,19 +28,52 @@ function generateRef(): string {
   return `SV-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
 }
 
+const KORAPAY_SCRIPT_URLS = [
+  "https://korabay.com/inline.min.js",
+  "https://korapay.com/inline.min.js",
+];
+
 function loadKorapayScript(): Promise<void> {
   return new Promise((resolve, reject) => {
+    // Already loaded — resolve immediately
     if ((window as any).Korapay) { resolve(); return; }
-    const existing = document.getElementById("korapay-inline-script");
-    if (existing) { existing.addEventListener("load", () => resolve()); return; }
-    const s = document.createElement("script");
-    s.id = "korapay-inline-script";
-    s.src = "https://korapay.com/inline.min.js";
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("Could not load payment SDK. Check your internet connection."));
-    document.head.appendChild(s);
+
+    // Poll for up to 5 seconds in case HTML-preloaded script is still loading
+    let polls = 0;
+    const poll = setInterval(() => {
+      polls++;
+      if ((window as any).Korapay) { clearInterval(poll); resolve(); return; }
+      if (polls >= 50) {
+        clearInterval(poll);
+        // Script not available after polling — try injecting dynamically with fallback URLs
+        injectWithFallback(0, resolve, reject);
+      }
+    }, 100);
   });
+}
+
+function injectWithFallback(idx: number, resolve: () => void, reject: (e: Error) => void) {
+  if (idx >= KORAPAY_SCRIPT_URLS.length) {
+    reject(new Error("Could not load Korapay payment SDK. Please check your internet connection and try again."));
+    return;
+  }
+  // Remove any previous failed attempt
+  const prev = document.getElementById("korapay-inline-script");
+  if (prev) prev.remove();
+
+  const s = document.createElement("script");
+  s.id = "korapay-inline-script";
+  s.src = KORAPAY_SCRIPT_URLS[idx];
+  s.async = true;
+  s.onload = () => {
+    // Give the script 300ms to register window.Korapay
+    setTimeout(() => {
+      if ((window as any).Korapay) resolve();
+      else injectWithFallback(idx + 1, resolve, reject);
+    }, 300);
+  };
+  s.onerror = () => injectWithFallback(idx + 1, resolve, reject);
+  document.head.appendChild(s);
 }
 
 export default function CheckoutPage() {
