@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "wouter";
 import { Star, ShoppingCart, MessageCircle, Play } from "lucide-react";
-import { useGetProduct } from "@/lib/api-client";
+import { useProduct } from "@/lib/use-products";
 import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,10 +19,8 @@ interface LocalReview {
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
-  const productId = parseInt(id || "0");
-  const { data: product, isLoading } = useGetProduct(productId, {
-    query: { enabled: !!productId, queryKey: ["/api/products", productId] },
-  });
+  const productId = parseInt(id || "0") || null;
+  const { data: product, isLoading } = useProduct(productId);
   const { addItem } = useCart();
   const { toast } = useToast();
 
