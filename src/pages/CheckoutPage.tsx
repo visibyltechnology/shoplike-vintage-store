@@ -29,8 +29,8 @@ function generateRef(): string {
 }
 
 const KORAPAY_SCRIPT_URLS = [
-  "https://korabay.com/inline.min.js",
-  "https://korapay.com/inline.min.js",
+  "/korapay-collections.min.js",
+  "https://korablobstorage.blob.core.windows.net/modal-bucket/korapay-collections.min.js",
 ];
 
 function loadKorapayScript(): Promise<void> {
