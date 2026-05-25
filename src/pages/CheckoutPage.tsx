@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { useCart } from "@/context/CartContext";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { CreditCard, Truck, ShieldCheck, Lock, BadgeCheck } from "lucide-react";
+import { useLocation } from "wouter";
 
 const NIGERIA_STATES = [
   "Abia","Adamawa","Akwa Ibom","Anambra","Bauchi","Bayelsa","Benue","Borno",
@@ -28,75 +28,59 @@ function generateRef(): string {
   return `SV-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
 }
 
-const KORAPAY_SCRIPT_URLS = [
-  "/korapay-collections.min.js",
-  "https://korablobstorage.blob.core.windows.net/modal-bucket/korapay-collections.min.js",
-];
+/**
+ * Initializes a Korapay payment by calling their hosted checkout endpoint directly.
+ * Returns the URL to redirect the customer to — no SDK required.
+ */
+async function initKorapayCheckout(opts: {
+  key: string;
+  reference: string;
+  amount: number;
+  currency: string;
+  customer: { name: string; email: string; phone: string };
+  redirectUrl: string;
+  notificationUrl?: string;
+}): Promise<string> {
+  const isTest = opts.key.startsWith("pk_test_");
+  const baseUrl = isTest
+    ? "https://test-checkout.korapay.com"
+    : "https://checkout.korapay.com";
 
-/** Scan window for any object that has an `initialize` function — works regardless of the SDK's global name. */
-function findKorapaySDK(): any | null {
-  const w = window as any;
-  // Named candidates first
-  const candidates = ["Korapay", "KorapayModal", "KorapayInline", "KorapayCheckout", "KorapayCollections"];
-  for (const k of candidates) {
-    if (w[k] && typeof w[k].initialize === "function") return w[k];
-  }
-  // Fallback: scan all globals added after page load (indexed by __kpy_before)
-  const before: string[] = w.__kpy_before || [];
-  for (const k of Object.keys(w)) {
-    if (!before.includes(k) && w[k] && typeof w[k].initialize === "function") return w[k];
-  }
-  return null;
-}
-
-function loadKorapayScript(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Already loaded — resolve immediately
-    if (findKorapaySDK()) { resolve(); return; }
-
-    // Poll for up to 5 seconds in case the preloaded script from index.html is still executing
-    let polls = 0;
-    const poll = setInterval(() => {
-      polls++;
-      if (findKorapaySDK()) { clearInterval(poll); resolve(); return; }
-      if (polls >= 50) {
-        clearInterval(poll);
-        injectWithFallback(0, resolve, reject);
-      }
-    }, 100);
+  const res = await fetch(baseUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${opts.key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      key: opts.key,
+      reference: opts.reference,
+      amount: opts.amount,
+      currency: opts.currency,
+      customer: opts.customer,
+      redirect_url: opts.redirectUrl,
+      notification_url: opts.notificationUrl,
+    }),
   });
-}
 
-function injectWithFallback(idx: number, resolve: () => void, reject: (e: Error) => void) {
-  if (idx >= KORAPAY_SCRIPT_URLS.length) {
-    reject(new Error("Could not load Korapay payment SDK. Please check your internet connection and try again."));
-    return;
+  if (!res.ok) {
+    throw new Error(`Payment service error (${res.status}). Please try again.`);
   }
-  const prev = document.getElementById("korapay-inline-script");
-  if (prev) prev.remove();
 
-  const s = document.createElement("script");
-  s.id = "korapay-inline-script";
-  s.src = KORAPAY_SCRIPT_URLS[idx];
-  s.onload = () => {
-    // Poll for up to 2s after script loads to find the SDK global
-    let p = 0;
-    const t = setInterval(() => {
-      p++;
-      const sdk = findKorapaySDK();
-      if (sdk) { clearInterval(t); resolve(); return; }
-      if (p >= 20) {
-        clearInterval(t);
-        injectWithFallback(idx + 1, resolve, reject);
-      }
-    }, 100);
-  };
-  s.onerror = () => injectWithFallback(idx + 1, resolve, reject);
-  document.head.appendChild(s);
+  const json = await res.json();
+  const inner = json?.data?.data ?? json?.data ?? json;
+
+  if (!inner?.unique_reference) {
+    throw new Error(
+      inner?.message || json?.data?.message || "Could not initialize payment. Please try again."
+    );
+  }
+
+  return `${baseUrl}/${inner.unique_reference}/pay`;
 }
 
 export default function CheckoutPage() {
-  const { items, total, clearCart } = useCart();
+  const { items, total } = useCart();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -104,7 +88,6 @@ export default function CheckoutPage() {
     fullName: "", phone: "", email: "", address: "", city: "", state: "Lagos",
   });
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<"form" | "paying">("form");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = () => {
@@ -133,75 +116,58 @@ export default function CheckoutPage() {
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    setStep("paying");
 
     const orderRef = generateRef();
 
     try {
-      // 1. Save order to Supabase
+      // 1. Save order to Supabase before redirecting
       const { error: orderErr } = await supabase.from("orders").insert({
         order_ref: orderRef,
         customer_name: form.fullName,
         customer_email: form.email,
         customer_phone: form.phone,
-        shipping_address: { address: form.address, city: form.city, state: form.state, country: "Nigeria" },
+        shipping_address: {
+          address: form.address, city: form.city,
+          state: form.state, country: "Nigeria",
+        },
         items: items.map(i => ({
           productId: i.productId, name: i.name, price: i.price,
-          qty: i.qty, size: i.size || null, color: i.color || null, imageUrl: i.imageUrl || null,
+          qty: i.qty, size: i.size || null, color: i.color || null,
+          imageUrl: i.imageUrl || null,
         })),
         total,
         status: "pending",
         payment_status: "pending",
       });
-      if (orderErr) throw new Error("Could not create order: " + orderErr.message);
+      if (orderErr) throw new Error("Could not save order: " + orderErr.message);
 
-      // 2. Load Korapay inline script
-      await loadKorapayScript();
-      setLoading(false);
-
-      // 3. Open Korapay inline checkout
-      const kp = findKorapaySDK();
-      if (!kp || typeof kp.initialize !== "function") throw new Error("Payment SDK not available");
-
-      kp.initialize({
+      // 2. Initialize Korapay payment — direct API call, no SDK
+      const checkoutUrl = await initKorapayCheckout({
         key: getPublicKey(),
         reference: orderRef,
-        amount: Math.round(total * 100), // kobo
+        amount: Math.round(total * 100), // amount in kobo
         currency: "NGN",
         customer: { name: form.fullName, email: form.email, phone: form.phone },
-        notification_url: `https://shoplike-vintage-store.vercel.app/api/korapay-webhook`,
-        onSuccess: async (data: any) => {
-          try {
-            await supabase.from("orders").update({
-              payment_status: "paid",
-              payment_ref: data.reference || orderRef,
-              status: "confirmed",
-            }).eq("order_ref", orderRef);
-          } catch {}
-          clearCart();
-          setLocation(`/order-success/${orderRef}`);
-        },
-        onFailed: async (_data: any) => {
-          try {
-            await supabase.from("orders").update({ payment_status: "failed" }).eq("order_ref", orderRef);
-          } catch {}
-          setStep("form");
-          toast({ title: "Payment failed", description: "Your payment was not completed. Please try again.", variant: "destructive" });
-        },
-        onClose: () => {
-          setStep("form");
-          toast({ title: "Payment window closed", description: "Your order is saved. Click 'Place Order' again when ready to pay." });
-        },
+        redirectUrl: `${window.location.origin}/order-success/${orderRef}`,
+        notificationUrl: `https://shoplike-vintage-store.vercel.app/api/korapay-webhook`,
       });
+
+      // 3. Redirect to Korapay hosted checkout page
+      window.location.href = checkoutUrl;
     } catch (err: any) {
       setLoading(false);
-      setStep("form");
-      toast({ title: "Error", description: err.message || "Something went wrong. Please try again.", variant: "destructive" });
+      toast({
+        title: "Payment Error",
+        description: err.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
   const inputCls = (field?: string) =>
-    `w-full px-3 py-2.5 rounded-xl border ${field && errors[field] ? "border-destructive ring-1 ring-destructive" : "border-border"} bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all`;
+    `w-full px-3 py-2.5 rounded-xl border ${
+      field && errors[field] ? "border-destructive ring-1 ring-destructive" : "border-border"
+    } bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all`;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -259,7 +225,7 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Payment Method — Korapay only */}
+          {/* Payment Method */}
           <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
             <h2 className="font-semibold text-lg flex items-center gap-2">
               <CreditCard size={18} className="text-primary" /> Payment
@@ -268,22 +234,24 @@ export default function CheckoutPage() {
               <BadgeCheck size={22} className="text-[#0D6B58] shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-semibold text-sm">Pay securely with Korapay</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Card · Bank Transfer · USSD · Wallet — all payment methods accepted</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Card · Bank Transfer · USSD · Wallet — all payment methods accepted
+                </p>
               </div>
               <img src="/korapay-logo.svg" alt="Korapay" className="h-6 w-auto shrink-0"
                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-xl px-4 py-3">
               <ShieldCheck size={14} className="text-green-500 shrink-0" />
-              A secure Korapay payment window will open. Your order is saved and will be confirmed immediately after payment.
+              You'll be taken to Korapay's secure payment page. Your order is saved and confirmed immediately after payment.
             </div>
           </div>
 
-          <Button type="submit" disabled={loading || step === "paying"}
+          <Button type="submit" disabled={loading}
             className="w-full bg-[#0D6B58] hover:bg-[#0a5245] text-white text-base font-bold py-6 rounded-2xl flex items-center justify-center gap-2"
             data-testid="button-place-order">
             {loading ? (
-              <><span className="animate-spin inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> Processing…</>
+              <><span className="animate-spin inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full" /> Redirecting to Korapay…</>
             ) : (
               <><Lock size={16} /> Pay ₦{total.toLocaleString()} with Korapay</>
             )}
@@ -306,7 +274,9 @@ export default function CheckoutPage() {
                   <p className="font-medium line-clamp-2 leading-snug">{item.name}</p>
                   {item.size && <p className="text-muted-foreground text-xs">Size: {item.size}</p>}
                   {item.color && <p className="text-muted-foreground text-xs">Color: {item.color}</p>}
-                  <p className="text-primary font-semibold text-xs mt-0.5">₦{(item.price * item.qty).toLocaleString()} × {item.qty}</p>
+                  <p className="text-primary font-semibold text-xs mt-0.5">
+                    ₦{(item.price * item.qty).toLocaleString()} × {item.qty}
+                  </p>
                 </div>
               </div>
             ))}
