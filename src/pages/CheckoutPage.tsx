@@ -3,7 +3,7 @@ import { useCart } from "@/context/CartContext";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { CreditCard, Truck, ShieldCheck, Lock, BadgeCheck } from "lucide-react";
+import { Truck, ShieldCheck, Lock, Smartphone, Building2 } from "lucide-react";
 import { useLocation } from "wouter";
 
 const NIGERIA_STATES = [
@@ -14,73 +14,16 @@ const NIGERIA_STATES = [
   "Yobe","Zamfara",
 ];
 
-// Keys — swap for live keys when going live
-const KORAPAY_SECRET_KEY = "sk_test_sDfBgkNvnUiYPsGQCkUGYEU8pNaMLxM28DhVo8ag";
+const BANK_ACCOUNT = {
+  bank: "Moniepoint",
+  accountNumber: "9063172596",
+  accountName: "Shoplike Vintage",
+};
 
-function getSecretKey(): string {
-  try {
-    const s = localStorage.getItem("sv_store_settings");
-    if (s) {
-      const p = JSON.parse(s);
-      if (p.korapaySecretKey) return p.korapaySecretKey;
-    }
-  } catch {}
-  return KORAPAY_SECRET_KEY;
-}
+const WHATSAPP_NUMBER = "2349063172596";
 
 function generateRef(): string {
   return `SV-${Date.now()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
-}
-
-/**
- * Creates a Korapay charge via their standard API and returns the hosted checkout URL.
- * Uses the secret key — CORS is open (*) on api.korapay.com so this works from the browser.
- * Amount is in NAIRA (not kobo) for the standard charges API.
- */
-async function createKorapayCharge(opts: {
-  secretKey: string;
-  reference: string;
-  amountNaira: number;
-  customer: { name: string; email: string };
-  narration: string;
-  redirectUrl: string;
-}): Promise<string> {
-  const isTest = opts.secretKey.startsWith("sk_test_");
-  const apiBase = isTest
-    ? "https://api.korapay.com"
-    : "https://api.korapay.com";
-
-  const res = await fetch(`${apiBase}/merchant/api/v1/charges/initialize`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${opts.secretKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      reference: opts.reference,
-      amount: opts.amountNaira,           // Standard API uses Naira
-      currency: "NGN",
-      narration: opts.narration,
-      redirect_url: opts.redirectUrl,
-      customer: {
-        name: opts.customer.name,
-        email: opts.customer.email,
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Payment service error (${res.status}). ${text.slice(0, 100)}`);
-  }
-
-  const json = await res.json();
-
-  if (!json.status || !json.data?.checkout_url) {
-    throw new Error(json.message || "Could not initialize payment. Please try again.");
-  }
-
-  return json.data.checkout_url;
 }
 
 export default function CheckoutPage() {
@@ -98,8 +41,6 @@ export default function CheckoutPage() {
     const e: Record<string, string> = {};
     if (!form.fullName.trim()) e.fullName = "Full name is required";
     if (!form.phone.trim()) e.phone = "Phone number is required";
-    if (!form.email.trim()) e.email = "Email is required for payment";
-    else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = "Enter a valid email address";
     if (!form.address.trim()) e.address = "Delivery address is required";
     if (!form.city.trim()) e.city = "City is required";
     setErrors(e);
@@ -109,7 +50,9 @@ export default function CheckoutPage() {
   if (items.length === 0) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-20 text-center">
-        <ShoppingBagEmpty />
+        <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
+          <Smartphone size={36} className="text-muted-foreground" />
+        </div>
         <p className="text-xl text-muted-foreground mb-4">Your cart is empty.</p>
         <Button onClick={() => setLocation("/shop")}>Continue Shopping</Button>
       </div>
@@ -124,11 +67,10 @@ export default function CheckoutPage() {
     const orderRef = generateRef();
 
     try {
-      // 1. Save order to Supabase before redirecting to payment
       const { error: orderErr } = await supabase.from("orders").insert({
         order_ref: orderRef,
         customer_name: form.fullName,
-        customer_email: form.email,
+        customer_email: form.email || null,
         customer_phone: form.phone,
         shipping_address: {
           address: form.address,
@@ -151,22 +93,11 @@ export default function CheckoutPage() {
       });
       if (orderErr) throw new Error("Could not save your order: " + orderErr.message);
 
-      // 2. Create Korapay charge and get hosted checkout URL
-      const checkoutUrl = await createKorapayCharge({
-        secretKey: getSecretKey(),
-        reference: orderRef,
-        amountNaira: Math.round(total),    // Standard API wants Naira
-        customer: { name: form.fullName, email: form.email },
-        narration: `Shoplike Vintage Order ${orderRef}`,
-        redirectUrl: `${window.location.origin}/order-success/${orderRef}`,
-      });
-
-      // 3. Redirect customer to Korapay-hosted payment page
-      window.location.href = checkoutUrl;
+      setLocation(`/order-success/${orderRef}`);
     } catch (err: any) {
       setLoading(false);
       toast({
-        title: "Payment Error",
+        title: "Order Error",
         description: err.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
@@ -182,7 +113,7 @@ export default function CheckoutPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <h1 className="text-3xl font-serif font-bold mb-2">Checkout</h1>
       <p className="text-muted-foreground text-sm mb-8 flex items-center gap-1.5">
-        <Lock size={13} /> Secured by Korapay — your payment is encrypted and safe
+        <Lock size={13} /> Fill in your details — we'll show you how to pay after
       </p>
 
       <div className="grid md:grid-cols-3 gap-8">
@@ -214,7 +145,7 @@ export default function CheckoutPage() {
                 {errors.phone && <p className="text-xs text-destructive mt-1">{errors.phone}</p>}
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Email Address *</label>
+                <label className="text-sm font-medium mb-1.5 block">Email (optional)</label>
                 <input
                   type="email"
                   value={form.email}
@@ -222,7 +153,6 @@ export default function CheckoutPage() {
                   placeholder="you@example.com"
                   className={inputCls("email")}
                 />
-                {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
               </div>
               <div className="col-span-2">
                 <label className="text-sm font-medium mb-1.5 block">Delivery Address *</label>
@@ -258,51 +188,52 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Payment Method */}
+          {/* Payment Method Preview */}
           <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
             <h2 className="font-semibold text-lg flex items-center gap-2">
-              <CreditCard size={18} className="text-primary" /> Payment
+              <Building2 size={18} className="text-primary" /> Payment Method
             </h2>
-            <div className="flex items-start gap-4 p-4 rounded-xl border-2 border-[#0D6B58] bg-[#0D6B58]/5">
-              <BadgeCheck size={22} className="text-[#0D6B58] shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold text-sm">Pay securely with Korapay</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Card · Bank Transfer · USSD · Wallet — all payment methods accepted
-                </p>
+            <div className="flex items-start gap-4 p-4 rounded-xl border-2 border-primary bg-primary/5">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <Building2 size={20} className="text-primary" />
               </div>
-              <img
-                src="/korapay-logo.svg"
-                alt="Korapay"
-                className="h-6 w-auto shrink-0"
-                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
+              <div className="flex-1">
+                <p className="font-semibold text-sm">Bank Transfer (Moniepoint)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Transfer to our account, then send payment proof on WhatsApp to confirm your order.
+                </p>
+                <div className="mt-3 space-y-1 text-sm">
+                  <div className="flex gap-2"><span className="text-muted-foreground w-28">Bank:</span><span className="font-semibold">{BANK_ACCOUNT.bank}</span></div>
+                  <div className="flex gap-2"><span className="text-muted-foreground w-28">Account No:</span><span className="font-mono font-bold text-primary">{BANK_ACCOUNT.accountNumber}</span></div>
+                  <div className="flex gap-2"><span className="text-muted-foreground w-28">Account Name:</span><span className="font-semibold">{BANK_ACCOUNT.accountName}</span></div>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-xl px-4 py-3">
               <ShieldCheck size={14} className="text-green-500 shrink-0" />
-              You'll be taken to Korapay's secure payment page. Your order is saved and confirmed immediately after payment.
+              After placing your order, you'll see the full payment details and a WhatsApp button to send your proof.
             </div>
           </div>
 
           <Button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#0D6B58] hover:bg-[#0a5245] text-white text-base font-bold py-6 rounded-2xl flex items-center justify-center gap-2"
+            className="w-full text-white text-base font-bold py-6 rounded-2xl flex items-center justify-center gap-2"
             data-testid="button-place-order"
           >
             {loading ? (
               <>
                 <span className="animate-spin inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
-                Redirecting to Korapay…
+                Saving your order…
               </>
             ) : (
               <>
-                <Lock size={16} /> Pay ₦{total.toLocaleString()} with Korapay
+                <Lock size={16} /> Place Order — ₦{total.toLocaleString()}
               </>
             )}
           </Button>
           <p className="text-center text-xs text-muted-foreground -mt-2">
-            🔒 256-bit SSL encrypted · Powered by Korapay
+            Your order is saved instantly. Payment is confirmed after bank transfer.
           </p>
         </form>
 
@@ -346,18 +277,10 @@ export default function CheckoutPage() {
           </div>
           <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground border-t border-border pt-3">
             <ShieldCheck size={13} className="text-green-500" />
-            <span>Secured by Korapay</span>
+            <span>Pay via Moniepoint Bank Transfer</span>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function ShoppingBagEmpty() {
-  return (
-    <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
-      <CreditCard size={36} className="text-muted-foreground" />
     </div>
   );
 }
