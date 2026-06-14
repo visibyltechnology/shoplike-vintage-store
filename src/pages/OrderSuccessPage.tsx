@@ -1,9 +1,27 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
-import { CheckCircle, MessageCircle, ShoppingBag, Download, Printer, Package, Truck, Clock, XCircle } from "lucide-react";
+import { CheckCircle, MessageCircle, ShoppingBag, Download, Printer, Package, Truck, Clock, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import { useCart } from "@/context/CartContext";
+
+const BANK_ACCOUNT = {
+  bank: "Moniepoint",
+  accountNumber: "9063172596",
+  accountName: "Shoplike Vintage",
+};
+
+const WHATSAPP_NUMBER = "2349063172596";
+
+function buildWhatsAppMessage(ref: string, total: number, name: string) {
+  return encodeURIComponent(
+    `Hello Shoplike Vintage! 👋\n\nI just placed an order and have made payment.\n\n` +
+    `📦 Order Ref: ${ref}\n` +
+    `👤 Name: ${name}\n` +
+    `💰 Amount Paid: ₦${total.toLocaleString()}\n\n` +
+    `Please find my payment proof attached. Kindly confirm my order. Thank you!`
+  );
+}
 
 function printReceipt(order: any) {
   const win = window.open("", "_blank", "width=640,height=900");
@@ -79,28 +97,13 @@ export default function OrderSuccessPage() {
   const { ref } = useParams<{ ref: string }>();
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState<string | null>(null);
   const { clearCart } = useCart();
-
-  // Parse Korapay redirect params: ?status=success&reference=...
-  const params = new URLSearchParams(window.location.search);
-  const korapayStatus = params.get("status"); // "success" | "failed" | null
-  const paymentFailed = korapayStatus === "failed";
 
   useEffect(() => {
     if (!ref) { setLoading(false); return; }
-
     const run = async () => {
-      // If returning from Korapay with success, update order in Supabase and clear cart
-      if (korapayStatus === "success") {
-        try {
-          await supabase.from("orders").update({
-            payment_status: "paid",
-            status: "confirmed",
-          }).eq("order_ref", ref).eq("payment_status", "pending");
-        } catch {}
-        clearCart();
-      }
-
+      clearCart();
       const { data } = await supabase
         .from("orders")
         .select("*")
@@ -109,42 +112,16 @@ export default function OrderSuccessPage() {
       setOrder(data);
       setLoading(false);
     };
-
     run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ref, korapayStatus]);
+  }, [ref]);
 
-  if (paymentFailed) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5 ring-4 ring-red-200">
-          <XCircle size={48} className="text-red-500" />
-        </div>
-        <h1 className="text-3xl font-serif font-bold mb-2">Payment Not Completed</h1>
-        <p className="text-muted-foreground text-lg mb-6">
-          Your order was saved but payment was not completed.
-        </p>
-        {ref && (
-          <div className="bg-muted rounded-2xl p-4 mb-6 text-center border border-border">
-            <p className="text-sm text-muted-foreground mb-1">Order reference</p>
-            <p className="font-mono font-bold text-xl text-primary">{ref}</p>
-          </div>
-        )}
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Link href="/checkout">
-            <Button className="bg-[#0D6B58] text-white hover:bg-[#0a5245]">Try Again</Button>
-          </Link>
-          <a
-            href="https://wa.me/2349063172596"
-            target="_blank" rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 bg-green-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-600 transition-colors"
-          >
-            <MessageCircle size={18} /> Chat on WhatsApp
-          </a>
-        </div>
-      </div>
-    );
-  }
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-16">
@@ -153,8 +130,8 @@ export default function OrderSuccessPage() {
         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5 ring-4 ring-green-200">
           <CheckCircle size={48} className="text-green-500" />
         </div>
-        <h1 className="text-3xl font-serif font-bold mb-2">Order Confirmed!</h1>
-        <p className="text-muted-foreground text-lg">Thank you for shopping with Shoplike Vintage 🎉</p>
+        <h1 className="text-3xl font-serif font-bold mb-2">Order Placed!</h1>
+        <p className="text-muted-foreground text-lg">Now complete your payment to confirm the order</p>
       </div>
 
       {/* Order ref */}
@@ -162,24 +139,82 @@ export default function OrderSuccessPage() {
         <div className="bg-muted rounded-2xl p-5 mb-6 text-center border border-border">
           <p className="text-sm text-muted-foreground mb-1">Your order reference</p>
           <p className="font-mono font-bold text-2xl text-primary" data-testid="text-order-ref">{ref}</p>
-          <p className="text-xs text-muted-foreground mt-2">📸 Screenshot this to track your order</p>
+          <p className="text-xs text-muted-foreground mt-2">Screenshot this to track your order</p>
         </div>
       )}
 
-      {/* Payment status badge */}
-      {!loading && order && (
-        <div className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 mb-6 text-sm font-semibold ${
-          order.payment_status === "paid"
-            ? "bg-green-50 text-green-700 border border-green-200"
-            : "bg-amber-50 text-amber-700 border border-amber-200"
-        }`}>
-          {order.payment_status === "paid" ? (
-            <><CheckCircle size={16} /> Payment confirmed — your order is being processed</>
-          ) : (
-            <><Clock size={16} /> Payment pending — our team will confirm your order shortly</>
+      {/* ===== PAYMENT INSTRUCTIONS ===== */}
+      <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-6 mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock size={20} className="text-amber-600" />
+          <h2 className="font-bold text-amber-900 text-lg">Complete Your Payment</h2>
+        </div>
+
+        <p className="text-sm text-amber-800 mb-4">
+          Transfer the exact amount to the account below, then tap the WhatsApp button to send your proof.
+        </p>
+
+        {/* Bank details card */}
+        <div className="bg-white rounded-xl border border-amber-200 p-4 space-y-3 mb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground">Bank</p>
+              <p className="font-bold">{BANK_ACCOUNT.bank}</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground">Account Number</p>
+              <p className="font-mono font-bold text-xl text-primary tracking-widest">{BANK_ACCOUNT.accountNumber}</p>
+            </div>
+            <button
+              onClick={() => copyToClipboard(BANK_ACCOUNT.accountNumber, "acct")}
+              className="flex items-center gap-1 text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-primary/5 transition-colors"
+            >
+              <Copy size={12} />
+              {copied === "acct" ? "Copied!" : "Copy"}
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground">Account Name</p>
+              <p className="font-semibold">{BANK_ACCOUNT.accountName}</p>
+            </div>
+          </div>
+          {!loading && order && (
+            <div className="flex items-center justify-between border-t border-amber-100 pt-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Amount to Transfer</p>
+                <p className="font-bold text-2xl text-primary">₦{Number(order.total).toLocaleString()}</p>
+              </div>
+              <button
+                onClick={() => copyToClipboard(String(Math.round(order.total)), "amount")}
+                className="flex items-center gap-1 text-xs text-primary border border-primary/30 rounded-lg px-3 py-1.5 hover:bg-primary/5 transition-colors"
+              >
+                <Copy size={12} />
+                {copied === "amount" ? "Copied!" : "Copy"}
+              </button>
+            </div>
           )}
         </div>
-      )}
+
+        {/* WhatsApp CTA */}
+        {ref && (
+          <a
+            href={`https://wa.me/${WHATSAPP_NUMBER}?text=${buildWhatsAppMessage(ref, order?.total ?? 0, order?.customer_name ?? "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="link-whatsapp-order"
+            className="flex items-center justify-center gap-2 w-full bg-green-500 text-white px-6 py-4 rounded-xl font-bold text-base hover:bg-green-600 transition-colors"
+          >
+            <MessageCircle size={20} />
+            Send Payment Proof on WhatsApp
+          </a>
+        )}
+        <p className="text-center text-xs text-amber-700 mt-2">
+          Tap above after making the transfer — attach your payment screenshot
+        </p>
+      </div>
 
       {/* Order details */}
       {!loading && order && (
@@ -214,7 +249,7 @@ export default function OrderSuccessPage() {
           </div>
 
           <div className="flex justify-between font-bold text-base border-t border-border pt-3">
-            <span>Total Paid</span>
+            <span>Order Total</span>
             <span className="text-primary">₦{Number(order.total).toLocaleString()}</span>
           </div>
 
@@ -234,18 +269,10 @@ export default function OrderSuccessPage() {
       )}
 
       <p className="text-sm text-muted-foreground text-center mb-6">
-        We'll contact you on WhatsApp or phone to confirm your delivery details and estimated arrival time.
+        We'll contact you on WhatsApp or phone once we confirm your payment.
       </p>
 
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
-        <a
-          href="https://wa.me/2349063172596"
-          target="_blank" rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 bg-green-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-600 transition-colors"
-          data-testid="link-whatsapp-order"
-        >
-          <MessageCircle size={18} /> Chat on WhatsApp
-        </a>
         <Link href="/track-order">
           <Button variant="outline" className="flex items-center gap-2 w-full sm:w-auto">
             <Package size={18} /> Track Order
