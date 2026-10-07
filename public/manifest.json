@@ -1,0 +1,16 @@
+{
+  "name": "Shoplike Vintage Store",
+  "short_name": "Shoplike",
+  "description": "Curated vintage & contemporary fashion for every story.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#c9a96e",
+  "icons": [
+    { "src": "/logo.jpg", "sizes": "192x192", "type": "image/jpeg", "purpose": "any maskable" },
+    { "src": "/logo.jpg", "sizes": "512x512", "type": "image/jpeg", "purpose": "any maskable" }
+  ],
+  "categories": ["shopping", "fashion"],
+  "orientation": "portrait-primary",
+  "lang": "en-NG"
+}
