@@ -5,7 +5,7 @@ service cloud.firestore {
     function isAdmin() {
       return signedIn()
         && request.auth.token.email != null
-        && request.auth.token.email.lower() == 'shoplikevintage@gmail.com';
+        && request.auth.token.email == 'shoplikevintage@gmail.com';
     }
 
     match /products/{productId} {
