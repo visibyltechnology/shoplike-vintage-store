@@ -1,4 +1,4 @@
-const CACHE = 'shoplike-v4';
+const CACHE = 'shoplike-v5';
 const PRECACHE = ['/', '/index.html', '/logo.jpg', '/banner.jpg', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
