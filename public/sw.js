@@ -1,4 +1,4 @@
-const CACHE = 'shoplike-v2';
+const CACHE = 'shoplike-v3';
 const PRECACHE = ['/', '/index.html', '/logo.jpg', '/banner.jpg', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
@@ -20,7 +20,6 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (!e.request.url.startsWith('http')) return;
   if (e.request.method !== 'GET') return;
-  if (e.request.url.includes('supabase.co')) return;
   if (e.request.url.includes('fonts.googleapis.com')) return;
   if (e.request.url.includes('unsplash.com')) return;
 
