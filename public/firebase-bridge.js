@@ -89,10 +89,11 @@
           return {data:Array.isArray(this.payload)?saved:saved[0],error:null,count:saved.length};
         }
         let docs=[];
-        if (this.table==="orders") {
-          const byRef=this.filters.find(f=>f[0]==="order_ref"&&f[1]==="eq");
-          if (byRef) {
-            const snap=await col.doc(String(byRef[2])).get();
+        if (this.table==="orders" || this.table==="user_profiles") {
+          const directKey=this.table==="orders" ? "order_ref" : "id";
+          const direct=this.filters.find(f=>f[0]===directKey&&f[1]==="eq");
+          if (direct) {
+            const snap=await col.doc(String(direct[2])).get();
             if (snap.exists) docs=[{...snap.data(),id:snap.id}];
           } else {
             const snap=await col.get();
@@ -122,7 +123,7 @@
             if(this.op==="delete") await ref.delete();
             else { const patch={...this.payload}; delete patch.id; await ref.set(patch,{merge:true}); }
           }
-          return {data:docs,error:null,count:docs.length};
+          return {data:this.op==="update"?docs.map(row=>({...row,...this.payload})):docs,error:null,count:docs.length};
         }
         if(this.head) return {data:null,error:null,count:total};
         if(this.one) return {data:docs[0]||null,error:null,count:total};
