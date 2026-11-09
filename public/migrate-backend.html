@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ShopLike Vintage — Secure Data Migration</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f7f5f0;color:#24211d;font:16px/1.5 Arial,sans-serif;padding:24px}.wrap{max-width:720px;margin:40px auto;background:#fff;border:1px solid #e8e0d3;border-radius:18px;padding:28px;box-shadow:0 12px 35px #241b1010}h1{font-size:25px;margin:0 0 8px}p{color:#655f57}.notice{background:#fbf4e8;border:1px solid #e9d9bd;border-radius:12px;padding:14px;margin:18px 0}.btn{border:0;border-radius:10px;background:#b88d4a;color:white;font-weight:700;padding:14px 20px;font-size:16px;width:100%;cursor:pointer}.btn:disabled{opacity:.5}.status{white-space:pre-wrap;background:#f5f3ef;border-radius:10px;padding:14px;min-height:90px;margin-top:16px;font:13px/1.6 monospace}.small{font-size:13px;color:#81796f}
+</style></head><body><main class="wrap">
+<h1>ShopLike Vintage data transfer</h1>
+<p>This one-time tool copies your existing store records from Supabase into Firebase. It does not delete or modify anything in Supabase.</p>
+<div class="notice"><b>Before starting</b><br>Sign in using the Firebase administrator account <b>shoplikevintage@gmail.com</b>. Keep this page open until the transfer finishes.</div>
+<button class="btn" id="start">Sign in / Start safe transfer</button>
+<div class="status" id="status">Waiting for administrator sign-in…</div>
+<p class="small">Records are copied in batches. Running the transfer again updates the same document IDs instead of creating duplicates.</p>
+</main>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const firebaseConfig={apiKey:"AIzaSyDfucFAu17khRS7PD0RwOmVHfeDxvpJGzQ",authDomain:"shoplike-vintage-live.firebaseapp.com",projectId:"shoplike-vintage-live",storageBucket:"shoplike-vintage-live.firebasestorage.app",messagingSenderId:"169234995971",appId:"1:169234995971:web:98a1c3c4a55e3649842736"};
+const fb=firebase.apps.length?firebase.app():firebase.initializeApp(firebaseConfig),auth=fb.auth(),db=fb.firestore();
+const sb=supabase.createClient("https://acmxbaswtisoklprfajo.supabase.co","sb_publishable_BT8QGJTbRCfAb9bYNp_ApQ_h3h6IgU1");
+const status=document.getElementById("status"),button=document.getElementById("start");
+function log(s){status.textContent+=s+"\n";}
+auth.onAuthStateChanged(u=>{if(u)status.textContent="Signed in as "+u.email+". Ready to transfer.\n";});
+async function copyTable(table){
+ log("Reading "+table+" from the old database…");
+ const {data,error}=await sb.from(table).select("*");
+ if(error)throw new Error(table+": "+error.message);
+ let copied=0;
+ for(let i=0;i<data.length;i+=400){
+  const batch=db.batch();
+  for(const row of data.slice(i,i+400)){
+   let id=table==="orders"?(row.order_ref||row.id):(row.id||row.uid);
+   if(!id)throw new Error(table+": found a record without an ID; stopped to avoid losing it.");
+   batch.set(db.collection(table).doc(String(id)),row,{merge:true});
+  }
+  await batch.commit();copied+=Math.min(400,data.length-i);
+ }
+ log("✓ "+table+": "+copied+" records copied.");
+ return copied;
+}
+button.addEventListener("click",async()=>{
+ button.disabled=true;status.textContent="";
+ try{
+  let user=auth.currentUser;
+  if(!user){const email=prompt("Firebase administrator email","shoplikevintage@gmail.com");if(!email){log("Cancelled.");return;}const password=prompt("Enter your Firebase administrator password");if(!password){log("Cancelled.");return;}const cred=await auth.signInWithEmailAndPassword(email,password);user=cred.user;}
+  if((user.email||"").toLowerCase()!=="shoplikevintage@gmail.com")throw new Error("This transfer is restricted to shoplikevintage@gmail.com.");
+  log("Administrator verified. Starting copy…");
+  const totals={};
+  for(const table of ["products","categories","orders","user_profiles"])totals[table]=await copyTable(table);
+  log("\nTRANSFER FINISHED. "+Object.values(totals).reduce((a,b)=>a+b,0)+" records copied in total.");
+  log("Your original Supabase records have not been deleted. You can now return to the main site.");
+ }catch(e){log("\nTRANSFER STOPPED: "+(e.message||String(e)));log("No Supabase records were deleted. Fix the reported issue and retry; copying is safe to repeat.");}
+ finally{button.disabled=false;}
+});
+</script></body></html>
