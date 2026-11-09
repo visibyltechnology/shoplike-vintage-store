@@ -6,11 +6,11 @@
   function removeOldFloating(){var old=document.getElementById("shoplike-admin-access");if(old)old.remove();}
   function addMenuLink(){
     removeOldFloating();
-    document.querySelectorAll("[data-shoplike-admin-link]").forEach(function(n){n.remove();});
-    if(!isAdmin)return;
+    if(!isAdmin){document.querySelectorAll("[data-shoplike-admin-link]").forEach(function(n){n.remove();});return;}
     var trackLinks=Array.from(document.querySelectorAll("a")).filter(function(a){return (a.getAttribute("href")||"").split("?")[0]==="/track-order";});
     trackLinks.forEach(function(track){
       if(track.parentElement&&track.parentElement.querySelector("[data-shoplike-admin-link]"))return;
+      if(track.nextElementSibling&&track.nextElementSibling.hasAttribute("data-shoplike-admin-link"))return;
       var link=document.createElement("a");
       link.href=ADMIN_HREF;
       link.textContent="Admin Dashboard";
