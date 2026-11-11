@@ -2,22 +2,23 @@
 (function(){
   var ADMIN_EMAIL="shoplikevintage@gmail.com",isAdmin=false;
   function syncAdminSidebar(){
-    if(!isAdmin){document.querySelectorAll("[data-shoplike-admin-link]").forEach(function(n){n.remove();});return;}
-    document.querySelectorAll('a[href="/track-order"]').forEach(function(track){
-      var drawer=null,node=track;
-      while(node&&node!==document.body){
-        var cls=typeof node.className==="string"?node.className:"";
-        if(cls.indexOf("fixed")!==-1&&cls.indexOf("inset-0")!==-1&&cls.indexOf("z-40")!==-1){drawer=node;break;}
-        node=node.parentElement;
-      }
-      if(!drawer||drawer.querySelector("[data-shoplike-admin-link]"))return;
+    var drawers=Array.from(document.querySelectorAll("div")).filter(function(el){
+      var cls=typeof el.className==="string"?el.className:"";
+      return cls.indexOf("md:hidden")!==-1&&cls.indexOf("fixed")!==-1&&cls.indexOf("inset-0")!==-1&&cls.indexOf("z-40")!==-1;
+    });
+    document.querySelectorAll("[data-shoplike-admin-link]").forEach(function(link){
+      if(!isAdmin||!drawers.some(function(drawer){return drawer.contains(link);}))link.remove();
+    });
+    if(!isAdmin)return;
+    drawers.forEach(function(drawer){
+      if(drawer.querySelector("[data-shoplike-admin-link]"))return;
       var link=document.createElement("a");
       link.href="/admin/dashboard";
-      link.textContent="Admin Dashboard";
       link.setAttribute("data-shoplike-admin-link","1");
       link.setAttribute("aria-label","Open administrator dashboard");
       link.style.cssText="display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;padding:14px 0;border-bottom:1px solid rgba(139,45,98,.18);color:#8b2d62;font-size:18px;font-weight:600;text-decoration:none;";
-      track.insertAdjacentElement("afterend",link);
+      link.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg><span>Admin Dashboard</span>';
+      drawer.appendChild(link);
     });
   }
   function init(){
