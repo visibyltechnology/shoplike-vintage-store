@@ -1,25 +1,42 @@
-const CACHE = 'shoplike-v6';
-const PRECACHE = ['/', '/index.html', '/logo.jpg', '/banner.jpg', '/manifest.json'];
+const CACHE = 'shoplike-v7';
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE).catch(() => {})));
-  self.skipWaiting();
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)));
+    await caches.open(CACHE);
+    await self.skipWaiting();
+  })());
 });
-self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))));
-  self.clients.claim();
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
-self.addEventListener('fetch', (e) => {
-  if (!e.request.url.startsWith('http') || e.request.method !== 'GET') return;
-  if (e.request.url.includes('fonts.googleapis.com') || e.request.url.includes('unsplash.com')) return;
-  e.respondWith(caches.match(e.request).then((cached) => {
-    if (cached) return cached;
-    return fetch(e.request).then((res) => {
-      if (res.ok && res.type === 'basic') {
-        const clone = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, clone));
-      }
-      return res;
-    }).catch(() => cached || new Response('Offline', { status: 503 }));
-  }));
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+
+  // Always fetch the app shell and executable assets from the network.
+  // Cache-first here can keep old JavaScript alive after a production deploy.
+  if (request.mode === 'navigate' || /\\.(?:js|css|html)(?:\\?|$)/i.test(new URL(request.url).pathname)) {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
+
+  // Cache only static images; never cache Firebase/API responses.
+  if (request.destination === 'image') {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      const response = await fetch(request);
+      if (response.ok) cache.put(request, response.clone());
+      return response;
+    })());
+  }
 });
