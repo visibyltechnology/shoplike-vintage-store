@@ -89,15 +89,14 @@
           return {data:Array.isArray(this.payload)?saved:saved[0],error:null,count:saved.length};
         }
         let docs=[];
-        if (this.table==="orders" || this.table==="user_profiles") {
-          const directKey=this.table==="orders" ? "order_ref" : "id";
-          const direct=this.filters.find(f=>f[0]===directKey&&f[1]==="eq");
-          if (direct) {
-            const snap=await col.doc(String(direct[2])).get();
-            if (snap.exists) docs=[{...snap.data(),id:snap.id}];
-          } else {
-            const snap=await col.get();
-            docs=snap.docs.map(d=>({...d.data(),id:d.id}));
+        const directKey=this.table==="orders" ? "order_ref" : "id";
+        const direct=this.filters.find(f=>f[0]===directKey&&f[1]==="eq");
+        if (direct && ["products","orders","user_profiles","categories"].includes(this.table)) {
+          const snap=await col.doc(String(direct[2])).get();
+          if (snap.exists) docs=[{...snap.data(),id:snap.id}];
+          else {
+            const all=await col.get();
+            docs=all.docs.map(d=>({...d.data(),id:d.id}));
           }
         } else {
           const snap=await col.get();
