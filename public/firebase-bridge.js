@@ -105,8 +105,8 @@
         }
         const matches=(row,k,op,v)=>{
           const x=row[k];
-          if(op==="eq") return x===v;
-          if(op==="neq") return x!==v;
+          if(op==="eq") return k==="id" ? String(x)===String(v) : x===v;
+          if(op==="neq") return k==="id" ? String(x)!==String(v) : x!==v;
           if(op==="gte") return x>=v;
           if(op==="lte") return x<=v;
           if(op==="ilike") return String(x??"").toLowerCase().includes(String(v).replace(/%/g,"").toLowerCase());
